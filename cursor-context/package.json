@@ -1,0 +1,78 @@
+{
+  "name": "cursor-context",
+  "displayName": "Cursor Context",
+  "description": "Browse and edit Cursor rules, commands, skills, hooks, MCP config, and AGENTS.md; copy chat-ready path references.",
+  "version": "0.1.0",
+  "publisher": "cursorcontext",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Instawork/cursor-plugins.git"
+  },
+  "license": "MIT",
+  "keywords": ["cursor", "rules", "mcp", "skills", "hooks"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onView:cursor-context.panel", "onCommand:cursorContext.refresh"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Cursor Context",
+      "properties": {
+        "cursor-context.skillGlobs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Extra absolute paths: each must be a directory to scan recursively for skill markdown (.md), excluding path segments named assets or scripts (e.g. a plugin skills folder)."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cursor-context",
+          "title": "Cursor Context",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "cursor-context": [
+        {
+          "type": "webview",
+          "id": "cursor-context.panel",
+          "name": "Browser"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "cursorContext.refresh",
+        "title": "Refresh Cursor Context catalog",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "cursorContext.refresh",
+          "when": "view == cursor-context.panel",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vsix": "npm run compile && vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.4.0"
+  }
+}

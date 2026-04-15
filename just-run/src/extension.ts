@@ -13,11 +13,11 @@ function justExecOptions(cwd: string, env: NodeJS.ProcessEnv) {
   return { cwd, env, maxBuffer: JUST_IO.maxBuffer };
 }
 
-const VIEW_ID = "justfile-runner.panel";
+const VIEW_ID = "just-run.panel";
 
-const PINS_STATE_KEY = "justfileRunner.pinnedRecipesByCwd";
+const PINS_STATE_KEY = "justRun.pinnedRecipesByCwd";
 
-const SAVED_STATE_KEY = "justfileRunner.savedCommandsByCwd";
+const SAVED_STATE_KEY = "justRun.savedCommandsByCwd";
 
 type SavedCommand = { id: string; recipe: string; args: string };
 
@@ -217,7 +217,72 @@ function firstWorkspaceJustfileCwd(): string | undefined {
   return undefined;
 }
 
+/** URI used to read resource-scoped `justRun` settings (multi-root aware). */
+function justRunConfigurationUri(): vscode.Uri | undefined {
+  const active = vscode.window.activeTextEditor?.document.uri;
+  if (active?.scheme === "file") {
+    return active;
+  }
+  return vscode.workspace.workspaceFolders?.[0]?.uri;
+}
+
+function cwdFromJustfileLocation(candidatePath: string): string | undefined {
+  const normalized = path.normalize(candidatePath);
+  if (!fs.existsSync(normalized)) {
+    return undefined;
+  }
+  const st = fs.statSync(normalized);
+  if (st.isDirectory()) {
+    for (const name of ["justfile", "Justfile"]) {
+      if (fs.existsSync(path.join(normalized, name))) {
+        return normalized;
+      }
+    }
+    return undefined;
+  }
+  const base = path.basename(normalized);
+  if (base === "justfile" || base === "Justfile") {
+    return path.dirname(normalized);
+  }
+  return undefined;
+}
+
+/**
+ * When `justRun.justfilePath` is set, use that directory or justfile path instead of auto-discovery.
+ */
+function resolveConfiguredJustCwd(): string | undefined {
+  const scopeUri = justRunConfigurationUri();
+  const raw = vscode.workspace.getConfiguration("justRun", scopeUri).get<string>("justfilePath", "");
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (path.isAbsolute(trimmed)) {
+    return cwdFromJustfileLocation(trimmed);
+  }
+  const folder = scopeUri ? vscode.workspace.getWorkspaceFolder(scopeUri) : vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    return undefined;
+  }
+  return cwdFromJustfileLocation(path.join(folder.uri.fsPath, trimmed));
+}
+
+/** When the user set `justRun.justfilePath` but it does not resolve to a usable justfile directory. */
+function invalidJustfilePathMessage(): string | undefined {
+  const scopeUri = justRunConfigurationUri();
+  const raw = vscode.workspace.getConfiguration("justRun", scopeUri).get<string>("justfilePath", "");
+  const trimmed = raw.trim();
+  if (!trimmed || resolveConfiguredJustCwd()) {
+    return undefined;
+  }
+  return `justRun.justfilePath (${trimmed}) does not exist or is not a directory containing justfile/Justfile or a path to that file.`;
+}
+
 function resolveJustCwd(): string | undefined {
+  const configured = resolveConfiguredJustCwd();
+  if (configured) {
+    return configured;
+  }
   const active = vscode.window.activeTextEditor?.document.uri;
   if (active?.scheme === "file") {
     const fromEditor = findJustfileCwdFromPath(active.fsPath);
@@ -269,7 +334,7 @@ function buildWebviewHtml(webview: vscode.Webview, extensionRoot: vscode.Uri): s
   return template.replaceAll("__NONCE__", nonce).replaceAll("__CSP__", escapeHtmlAttribute(csp));
 }
 
-class JustfileRunnerViewProvider implements vscode.WebviewViewProvider {
+class JustRunViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -389,6 +454,20 @@ class JustfileRunnerViewProvider implements vscode.WebviewViewProvider {
     if (!this.view) {
       return;
     }
+    const pathError = invalidJustfilePathMessage();
+    if (pathError) {
+      this.view.webview.postMessage({
+        type: "recipes",
+        pinned: [],
+        saved: [],
+        groups: [],
+        argHints: {},
+        cwd: "",
+        error: pathError,
+        recipeCount: 0,
+      });
+      return;
+    }
     const cwd = resolveJustCwd();
     if (!cwd) {
       this.view.webview.postMessage({
@@ -440,13 +519,18 @@ class JustfileRunnerViewProvider implements vscode.WebviewViewProvider {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  const provider = new JustfileRunnerViewProvider(context);
+  const provider = new JustRunViewProvider(context);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(VIEW_ID, provider),
-    vscode.commands.registerCommand("justfileRunner.refresh", () => provider.refresh()),
+    vscode.commands.registerCommand("justRun.refresh", () => provider.refresh()),
     vscode.window.onDidChangeActiveTextEditor(() => {
       void provider.refresh();
+    }),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("justRun.justfilePath")) {
+        void provider.refresh();
+      }
     }),
   );
 

@@ -1,12 +1,12 @@
 {
-  "name": "justfile-runner",
-  "displayName": "Justfile Runner",
+  "name": "just-run",
+  "displayName": "Just Run",
   "description": "Side panel listing just recipes from the workspace justfile with run buttons.",
   "version": "0.3.0",
   "publisher": "justfilerunner",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Instawork/cursor-plugin-justfile.git"
+    "url": "https://github.com/Instawork/cursor-plugins.git"
   },
   "license": "MIT",
   "keywords": ["just", "justfile", "task runner", "terminal"],
@@ -17,32 +17,32 @@
   "activationEvents": [
     "workspaceContains:**/justfile",
     "workspaceContains:**/Justfile",
-    "onView:justfile-runner.panel",
-    "onCommand:justfileRunner.refresh"
+    "onView:just-run.panel",
+    "onCommand:justRun.refresh"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "justfile-runner",
+          "id": "just-run",
           "title": "Just",
           "icon": "media/icon.svg"
         }
       ]
     },
     "views": {
-      "justfile-runner": [
+      "just-run": [
         {
           "type": "webview",
-          "id": "justfile-runner.panel",
+          "id": "just-run.panel",
           "name": "Recipes"
         }
       ]
     },
     "commands": [
       {
-        "command": "justfileRunner.refresh",
+        "command": "justRun.refresh",
         "title": "Refresh just recipes",
         "icon": "$(refresh)"
       }
@@ -50,11 +50,22 @@
     "menus": {
       "view/title": [
         {
-          "command": "justfileRunner.refresh",
-          "when": "view == justfile-runner.panel",
+          "command": "justRun.refresh",
+          "when": "view == just-run.panel",
           "group": "navigation"
         }
       ]
+    },
+    "configuration": {
+      "title": "Just Run",
+      "properties": {
+        "justRun.justfilePath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Directory that contains `justfile` / `Justfile`, or the path to that file. Relative paths are resolved from the workspace folder that contains the active file (or the first folder when none applies). Leave empty to pick a justfile automatically from the editor path and workspace roots."
+        }
+      }
     }
   },
   "scripts": {

@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="__CSP__" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+      color: var(--vscode-foreground);
+      margin: 0;
+      padding: 8px 8px 12px;
+      background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    }
+    .note-wrap { margin-bottom: 8px; }
+    .note-wrap details {
+      font-size: 0.78em;
+      color: var(--vscode-descriptionForeground);
+      border: 1px solid var(--vscode-widget-border, rgba(127,127,127,0.22));
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--vscode-sideBarSectionHeader-background, #333) 88%, transparent);
+    }
+    .note-wrap summary {
+      cursor: pointer;
+      padding: 6px 10px;
+      user-select: none;
+    }
+    .note-wrap summary:hover { color: var(--vscode-foreground); }
+    .note-wrap .note-body {
+      padding: 0 10px 8px;
+      line-height: 1.45;
+      border-top: 1px solid var(--vscode-widget-border, rgba(127,127,127,0.12));
+    }
+    .note-wrap code { font-size: 0.95em; }
+    .meta {
+      font-size: 0.75em;
+      color: var(--vscode-descriptionForeground);
+      margin-bottom: 8px;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .err {
+      color: var(--vscode-errorForeground);
+      margin-bottom: 8px;
+      white-space: pre-wrap;
+      font-size: 0.82em;
+      max-height: 4.5em;
+      overflow-y: auto;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--vscode-errorForeground) 12%, transparent);
+    }
+    .tabs-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      margin-bottom: 8px;
+      padding-bottom: 2px;
+      scrollbar-width: thin;
+    }
+    .tabs {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 4px;
+      width: max-content;
+      min-width: 100%;
+    }
+    .tabs button {
+      padding: 5px 10px;
+      font-size: 0.78em;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      background: var(--vscode-button-secondaryBackground, rgba(127,127,127,0.14));
+      color: var(--vscode-button-secondaryForeground, inherit);
+      border: 1px solid var(--vscode-widget-border, rgba(127,127,127,0.25));
+      border-radius: 999px;
+    }
+    .tabs button[data-active="1"] {
+      background: color-mix(in srgb, var(--vscode-button-background) 92%, transparent);
+      color: var(--vscode-button-foreground);
+      border-color: transparent;
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder, #fff) 35%, transparent);
+    }
+    .tabs button:hover { filter: brightness(1.08); }
+    input.filter {
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 6px 10px;
+      font-size: 0.88em;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, transparent);
+      border-radius: 6px;
+    }
+    input.filter:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+
+    .list { display: flex; flex-direction: column; gap: 8px; }
+
+    .card {
+      --accent: var(--vscode-charts-foreground, #888);
+      border: 1px solid var(--vscode-widget-border, rgba(127,127,127,0.2));
+      border-radius: 8px;
+      padding: 8px 10px 10px;
+      background: color-mix(in srgb, var(--vscode-editor-inactiveSelectionBackground, #444) 35%, var(--vscode-sideBar-background, #1e1e1e));
+      box-shadow: 0 1px 2px color-mix(in srgb, var(--vscode-widget-shadow, #000) 18%, transparent);
+      border-left: 3px solid var(--accent);
+    }
+    .card[data-kind="rule"]       { --accent: var(--vscode-charts-blue, #3794ff); }
+    .card[data-kind="command"]   { --accent: var(--vscode-charts-orange, #d19a66); }
+    .card[data-kind="cursorAgents"] { --accent: var(--vscode-charts-purple, #c678dd); }
+    .card[data-kind="skill"]      { --accent: var(--vscode-charts-green, #89d185); }
+    .card[data-kind="hook"],
+    .card[data-kind="hookManifest"] { --accent: var(--vscode-charts-yellow, #e5c07b); }
+    .card[data-kind="mcp"]       { --accent: var(--vscode-charts-red, #f14c4c); }
+    .card[data-kind="agents"]    { --accent: var(--vscode-charts-blue, #4fc1ff); }
+    .card[data-kind="legacy"]    { --accent: var(--vscode-descriptionForeground, #888); }
+
+    .card-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      min-width: 0;
+    }
+    .title-block {
+      flex: 1;
+      min-width: 0;
+    }
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .title {
+      flex: 1;
+      min-width: 0;
+      font-weight: 600;
+      font-size: 0.9em;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: default;
+    }
+    .card[data-renameable="1"] .title { cursor: text; }
+    .card[data-renameable="1"] .title:hover { text-decoration: underline dotted; text-underline-offset: 2px; }
+    .title-edit {
+      flex: 1;
+      min-width: 0;
+      font: inherit;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--vscode-focusBorder, #007fd4);
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+    }
+    .title-edit:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: 0; }
+    .btn-icon {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      font-size: 0.85em;
+      line-height: 1;
+      cursor: pointer;
+      border-radius: 4px;
+      border: 1px solid var(--vscode-widget-border, rgba(127,127,127,0.28));
+      background: var(--vscode-button-secondaryBackground, rgba(127,127,127,0.12));
+      color: var(--vscode-foreground);
+    }
+    .btn-icon:hover { background: var(--vscode-toolbar-hoverBackground); }
+    .btn-icon:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
+    .btn-icon[disabled] { opacity: 0.35; cursor: not-allowed; }
+    .badge {
+      font-size: 0.62em;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      background: color-mix(in srgb, var(--accent) 22%, var(--vscode-badge-background, #333));
+      color: var(--vscode-badge-foreground, inherit);
+      max-width: 88px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .badge.user { opacity: 0.9; }
+    .rule-desc {
+      font-size: 0.76em;
+      color: var(--vscode-descriptionForeground);
+      margin-top: 2px;
+      line-height: 1.35;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .row-path {
+      font-size: 0.72em;
+      font-family: var(--vscode-editor-font-family);
+      color: var(--vscode-descriptionForeground);
+      margin-top: 6px;
+      line-height: 1.35;
+      word-break: break-all;
+      user-select: text;
+      padding: 4px 6px;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--vscode-textBlockQuote-background, #000) 40%, transparent);
+    }
+    .row-detail {
+      font-size: 0.72em;
+      color: var(--vscode-descriptionForeground);
+      margin-top: 4px;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .row-actions button {
+      padding: 4px 10px;
+      font-size: 0.74em;
+      cursor: pointer;
+      background: var(--vscode-button-secondaryBackground, rgba(127,127,127,0.12));
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+      border: 1px solid var(--vscode-widget-border, rgba(127,127,127,0.28));
+      border-radius: 4px;
+    }
+    .row-actions button:hover { background: var(--vscode-toolbar-hoverBackground); }
+    .row-actions button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+    .empty-hint {
+      padding: 16px 8px;
+      text-align: center;
+      color: var(--vscode-descriptionForeground);
+      font-size: 0.88em;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="note-wrap">
+    <details>
+      <summary>About this panel</summary>
+      <div class="note-body">
+        Multi-agent <em>sessions</em> are IDE-internal. Listed paths include <code>.cursor/agents</code>, <code>.cursor/skills</code>, rules, commands, hooks, MCP, and <code>AGENTS.md</code>. Use <strong>Copy @</strong> and paste into Agent chat. <strong>Rename</strong> edits the file name (or MCP server id); paths update after save.
+      </div>
+    </details>
+  </div>
+  <div class="meta" id="meta" title=""></div>
+  <div class="err" id="err" style="display:none"></div>
+  <div class="tabs-scroll">
+    <div class="tabs" id="tabs"></div>
+  </div>
+  <input class="filter" id="filter" type="search" placeholder="Filter…" />
+  <div class="list" id="list"></div>
+  <script nonce="__NONCE__">
+    const vscode = acquireVsCodeApi();
+    const metaEl = document.getElementById('meta');
+    const errEl = document.getElementById('err');
+    const listEl = document.getElementById('list');
+    const filterEl = document.getElementById('filter');
+    const tabsEl = document.getElementById('tabs');
+
+    let allItems = [];
+    let tab = 'all';
+
+    const TAB_DEFS = [
+      { id: 'all', label: 'All', title: 'All categories' },
+      { id: 'rule', label: 'Rules', title: '.cursor/rules' },
+      { id: 'command', label: 'Cmds', title: '.cursor/commands' },
+      { id: 'cursorAgents', label: 'Agents', title: '.cursor/agents/*.md' },
+      { id: 'skill', label: 'Skills', title: '.cursor/skills' },
+      { id: 'hooks', label: 'Hooks', title: 'hooks.json & .cursor/hooks' },
+      { id: 'mcp', label: 'MCP', title: 'mcp.json servers' },
+      { id: 'agents', label: 'AGENTS', title: 'AGENTS.md files' },
+      { id: 'legacy', label: 'Legacy', title: '.cursorrules' },
+    ];
+
+    function fileName(p) {
+      if (!p) return '';
+      const s = String(p).replace(/\\/g, '/');
+      const i = s.lastIndexOf('/');
+      return i >= 0 ? s.slice(i + 1) : s;
+    }
+
+    function ruleDescription(it) {
+      if (it.kind !== 'rule') return '';
+      const base = fileName(it.fsPath);
+      const prefix = base + ' — ';
+      if (typeof it.label === 'string' && it.label.startsWith(prefix)) {
+        return it.label.slice(prefix.length);
+      }
+      return '';
+    }
+
+    function getEditableTitle(it) {
+      if (it.kind === 'mcp') return it.label;
+      if (it.kind === 'command' || it.kind === 'cursorAgents') return it.label;
+      if (it.kind === 'agents') return fileName(it.fsPath);
+      if (it.kind === 'skill') {
+        const base = fileName(it.fsPath);
+        return base.toLowerCase() === 'skill.md' ? it.label : (base.endsWith('.md') ? base.slice(0, -3) : base);
+      }
+      if (it.kind === 'rule' || it.kind === 'hook') return fileName(it.fsPath);
+      return it.label;
+    }
+
+    function displayTitle(it) {
+      if (it.kind === 'rule') return fileName(it.fsPath);
+      return it.label;
+    }
+
+    function tabMatches(kind, tabId) {
+      if (tabId === 'all') return true;
+      if (tabId === 'hooks') return kind === 'hook' || kind === 'hookManifest';
+      return kind === tabId;
+    }
+
+    function renderTabs() {
+      tabsEl.textContent = '';
+      for (const t of TAB_DEFS) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = t.label;
+        if (t.title) b.title = t.title;
+        b.dataset.tab = t.id;
+        b.dataset.active = t.id === tab ? '1' : '0';
+        b.addEventListener('click', () => {
+          tab = t.id;
+          renderTabs();
+          renderList();
+        });
+        tabsEl.appendChild(b);
+      }
+    }
+
+    function beginTitleEdit(it, titleEl, renameBtn) {
+      const current = getEditableTitle(it);
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'title-edit';
+      inp.value = current;
+      titleEl.replaceWith(inp);
+      if (renameBtn) renameBtn.disabled = true;
+      inp.focus();
+      inp.select();
+
+      let finished = false;
+      let cancelled = false;
+
+      const restore = () => {
+        if (finished) return;
+        finished = true;
+        const next = document.createElement('span');
+        next.className = 'title';
+        next.textContent = displayTitle(it);
+        next.title = it.renameable ? 'Click pencil or double-click to rename' : displayTitle(it);
+        next.addEventListener('dblclick', () => {
+          if (it.renameable) beginTitleEdit(it, next, renameBtn);
+        });
+        inp.replaceWith(next);
+        if (renameBtn) renameBtn.disabled = false;
+      };
+
+      const commit = () => {
+        if (finished) return;
+        const v = inp.value.trim();
+        if (!v || v === current) {
+          restore();
+          return;
+        }
+        vscode.postMessage({
+          type: 'renameTitle',
+          kind: it.kind,
+          fsPath: it.fsPath,
+          label: it.label,
+          detail: it.detail || '',
+          currentTitle: current,
+          newTitle: v,
+        });
+        restore();
+      };
+
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelled = true;
+          restore();
+        }
+      });
+      inp.addEventListener('blur', () => {
+        if (cancelled) {
+          cancelled = false;
+          return;
+        }
+        commit();
+      });
+    }
+
+    function renderList() {
+      const q = (filterEl.value || '').trim().toLowerCase();
+      listEl.textContent = '';
+      let n = 0;
+      for (const it of allItems) {
+        if (!tabMatches(it.kind, tab)) continue;
+        const hay = (it.label + ' ' + (it.detail || '') + ' ' + (it.pathRef || it.fsPath || '')).toLowerCase();
+        if (q && !hay.includes(q)) continue;
+        n += 1;
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.dataset.kind = it.kind;
+        card.dataset.renameable = it.renameable ? '1' : '0';
+
+        const head = document.createElement('div');
+        head.className = 'card-head';
+
+        const titleBlock = document.createElement('div');
+        titleBlock.className = 'title-block';
+
+        const titleRow = document.createElement('div');
+        titleRow.className = 'title-row';
+
+        const title = document.createElement('span');
+        title.className = 'title';
+        title.textContent = displayTitle(it);
+        title.title = it.renameable ? 'Click pencil or double-click to rename' : displayTitle(it);
+
+        const renameBtn = document.createElement('button');
+        renameBtn.type = 'button';
+        renameBtn.className = 'btn-icon';
+        renameBtn.title = 'Rename';
+        renameBtn.textContent = '✎';
+        renameBtn.disabled = !it.renameable;
+        renameBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!it.renameable) return;
+          beginTitleEdit(it, title, renameBtn);
+        });
+
+        title.addEventListener('dblclick', () => {
+          if (it.renameable) beginTitleEdit(it, title, renameBtn);
+        });
+
+        titleRow.appendChild(title);
+        titleRow.appendChild(renameBtn);
+        titleBlock.appendChild(titleRow);
+
+        const rd = ruleDescription(it);
+        if (rd) {
+          const desc = document.createElement('div');
+          desc.className = 'rule-desc';
+          desc.textContent = rd;
+          titleBlock.appendChild(desc);
+        }
+
+        const badge = document.createElement('span');
+        badge.className = 'badge' + (it.source === 'user' ? ' user' : '');
+        badge.textContent = it.source === 'user' ? 'user' : 'workspace';
+        badge.title = it.source === 'user' ? 'User (~/.cursor)' : 'Workspace';
+
+        head.appendChild(titleBlock);
+        head.appendChild(badge);
+        card.appendChild(head);
+
+        const pathLine = document.createElement('div');
+        pathLine.className = 'row-path';
+        const pathText = it.pathRef || it.fsPath || '';
+        pathLine.textContent = pathText;
+        pathLine.title = it.fsPath || pathText;
+        card.appendChild(pathLine);
+
+        if (it.kind === 'mcp' && it.detail) {
+          const d = document.createElement('div');
+          d.className = 'row-detail';
+          d.textContent = it.detail;
+          d.title = it.detail;
+          card.appendChild(d);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'row-actions';
+        const mkBtn = (label, title, msg) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = label;
+          btn.title = title;
+          btn.addEventListener('click', () => vscode.postMessage(msg));
+          return btn;
+        };
+        actions.appendChild(mkBtn('Open', 'Open in editor', { type: 'open', fsPath: it.fsPath }));
+        actions.appendChild(
+          mkBtn('Copy path', 'Copy path for chat', {
+            type: 'copyPath',
+            fsPath: it.fsPath,
+            pathRef: it.pathRef || it.fsPath,
+          }),
+        );
+        actions.appendChild(
+          mkBtn('Copy @', 'Copy @ reference', {
+            type: 'copyAt',
+            atRef: it.atRef || '@' + (it.pathRef || it.fsPath),
+          }),
+        );
+        card.appendChild(actions);
+        listEl.appendChild(card);
+      }
+      if (n === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-hint';
+        empty.textContent = q ? 'No matches.' : 'Nothing in this tab.';
+        listEl.appendChild(empty);
+      }
+    }
+
+    filterEl.addEventListener('input', renderList);
+
+    window.addEventListener('message', (event) => {
+      const msg = event.data;
+      if (msg.type === 'catalog') {
+        allItems = Array.isArray(msg.items) ? msg.items : [];
+        const home = msg.homeCursor || '';
+        metaEl.textContent = home ? '~/.cursor → ' + home : '';
+        metaEl.title = home || '';
+        if (msg.error) {
+          errEl.style.display = 'block';
+          errEl.textContent = msg.error;
+        } else {
+          errEl.style.display = 'none';
+          errEl.textContent = '';
+        }
+        renderTabs();
+        renderList();
+      }
+    });
+
+    renderTabs();
+    vscode.postMessage({ type: 'ready' });
+  </script>
+</body>
+</html>
