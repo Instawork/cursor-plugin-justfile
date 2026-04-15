@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="__CSP__" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); margin: 0; padding: 8px; }
+    .meta { font-size: 0.85em; opacity: 0.9; margin-bottom: 8px; line-height: 1.35; word-break: break-all; }
+    .meta .cwd { display: block; }
+    .meta .stats { display: block; color: var(--vscode-descriptionForeground); font-size: 0.92em; margin-top: 2px; }
+    .err { color: var(--vscode-errorForeground); margin-bottom: 8px; white-space: pre-wrap; }
+    input.filter { width: 100%; box-sizing: border-box; margin-bottom: 10px; padding: 6px 8px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); border-radius: 3px; }
+    input.filter:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+    .pinned-block,
+    .saved-block {
+      border-radius: 4px;
+      padding: 4px 8px 8px;
+      margin-bottom: 10px;
+      border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2));
+    }
+    .pinned-block { background: var(--vscode-editor-inactiveSelectionBackground, rgba(127, 127, 127, 0.12)); }
+    .saved-block { background: var(--vscode-sideBarSectionHeader-background, rgba(127, 127, 127, 0.1)); }
+    .pinned-block .group-heading,
+    .saved-block .group-heading,
+    .recipe-group-card .group-heading {
+      font-size: 0.9em;
+      font-weight: 600;
+      margin: 0 0 6px;
+      padding: 0;
+      border: none;
+      color: var(--vscode-descriptionForeground);
+    }
+    .recipe-group-card {
+      --group-bg: var(--vscode-sideBarSectionHeader-background, rgba(127, 127, 127, 0.1));
+      border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2));
+      border-left: 3px solid var(--group-accent);
+      border-radius: 4px;
+      padding: 4px 8px 8px;
+      margin-bottom: 10px;
+      background: linear-gradient(
+        100deg,
+        color-mix(in srgb, var(--group-accent) 16%, var(--group-bg)) 0%,
+        var(--group-bg) 52%
+      );
+    }
+    .recipe-group-card[data-tone="0"] { --group-accent: var(--vscode-charts-blue, #3794ff); }
+    .recipe-group-card[data-tone="1"] { --group-accent: var(--vscode-charts-green, #89d185); }
+    .recipe-group-card[data-tone="2"] { --group-accent: var(--vscode-charts-yellow, #e5c07b); }
+    .recipe-group-card[data-tone="3"] { --group-accent: var(--vscode-charts-orange, #d19a66); }
+    .recipe-group-card[data-tone="4"] { --group-accent: var(--vscode-charts-purple, #c678dd); }
+    .recipe-group-card[data-tone="5"] { --group-accent: var(--vscode-charts-red, #f14c4c); }
+    .recipe-group-card[data-tone="6"] { --group-accent: var(--vscode-charts-foreground, #cccccc); }
+    .recipe-group-card[data-tone="7"] { --group-accent: var(--vscode-textLink-foreground, #4fc1ff); }
+    .recipe-group-card .group-heading {
+      color: color-mix(in srgb, var(--group-accent) 55%, var(--vscode-descriptionForeground));
+    }
+    .recipe-group-card .recipe-block:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .recipe-block { padding: 6px 0; border-bottom: 1px solid var(--vscode-widget-border, rgba(127,127,127,0.15)); }
+    .recipe-top { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+    .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--vscode-editor-font-family); font-size: 0.97em; }
+    .row-actions { display: flex; gap: 4px; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
+    input.args-input { width: 100%; box-sizing: border-box; margin-top: 4px; padding: 4px 6px; font-family: var(--vscode-editor-font-family); font-size: 0.88em; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px; }
+    input.args-input:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+    button.pin, button.save, button.remove {
+      padding: 2px 8px;
+      font-size: 0.85em;
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid var(--vscode-widget-border, rgba(127,127,127,0.35));
+      border-radius: 2px;
+    }
+    button.pin, button.save { color: var(--vscode-textLink-foreground); }
+    button.remove { color: var(--vscode-errorForeground); }
+    button.pin:hover, button.save:hover, button.remove:hover { background: var(--vscode-toolbar-hoverBackground); }
+    button.pin:focus, button.save:focus, button.remove:focus { outline: 1px solid var(--vscode-focusBorder); }
+    button.run { padding: 2px 10px; font-size: 0.9em; cursor: pointer; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 2px; }
+    button.run:hover { background: var(--vscode-button-hoverBackground); }
+    button.run:focus { outline: 1px solid var(--vscode-focusBorder); }
+    .empty-hint { padding: 12px 4px; text-align: center; color: var(--vscode-descriptionForeground); font-size: 0.95em; }
+  </style>
+</head>
+<body>
+  <div class="meta" id="meta"></div>
+  <div class="err" id="err" style="display:none"></div>
+  <input class="filter" id="filter" type="search" placeholder="Filter recipes…" />
+  <div id="list"></div>
+  <script nonce="__NONCE__">
+    const vscode = acquireVsCodeApi();
+    const metaEl = document.getElementById('meta');
+    const errEl = document.getElementById('err');
+    const listEl = document.getElementById('list');
+    const filterEl = document.getElementById('filter');
+    let allGroups = [];
+    let pinnedRecipes = [];
+    let savedCommands = [];
+    let recipeCount = 0;
+    let argHints = {};
+
+    function readDraftArgs() {
+      const st = vscode.getState();
+      return st && st.draftArgs && typeof st.draftArgs === 'object' ? st.draftArgs : {};
+    }
+
+    function writeDraftArg(recipe, value) {
+      const st = vscode.getState() || {};
+      const draftArgs = Object.assign({}, st.draftArgs || {}, { [recipe]: value });
+      vscode.setState(Object.assign({}, st, { draftArgs: draftArgs }));
+    }
+
+    function groupToneIndex(label) {
+      const s = String(label);
+      let h = 0;
+      for (let i = 0; i < s.length; i++) {
+        h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+      }
+      return Math.abs(h) % 8;
+    }
+
+    function appendRecipeBlock(parent, name, isPinned, acceptsArgsExplicit) {
+      const showArgs =
+        typeof acceptsArgsExplicit === 'boolean' ? acceptsArgsExplicit : argHints[name] === true;
+      const block = document.createElement('div');
+      block.className = 'recipe-block';
+      const top = document.createElement('div');
+      top.className = 'recipe-top';
+      const nm = document.createElement('span');
+      nm.className = 'name';
+      nm.textContent = name;
+      nm.title = name;
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      const pinBtn = document.createElement('button');
+      pinBtn.className = 'pin';
+      pinBtn.type = 'button';
+      pinBtn.textContent = isPinned ? 'Unpin' : 'Pin';
+      pinBtn.title = isPinned ? 'Remove from pinned' : 'Pin to top';
+      pinBtn.addEventListener('click', () =>
+        vscode.postMessage({ type: 'togglePin', recipe: name }),
+      );
+      actions.appendChild(pinBtn);
+      let argsInput = null;
+      if (showArgs) {
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'save';
+        saveBtn.type = 'button';
+        saveBtn.textContent = 'Save';
+        saveBtn.title = 'Save recipe and arguments for quick run';
+        argsInput = document.createElement('input');
+        argsInput.type = 'text';
+        argsInput.className = 'args-input';
+        argsInput.placeholder = 'Arguments (optional, passed after recipe)';
+        const drafts = readDraftArgs();
+        argsInput.value = drafts[name] != null ? String(drafts[name]) : '';
+        argsInput.addEventListener('input', () => writeDraftArg(name, argsInput.value));
+        saveBtn.addEventListener('click', () => {
+          writeDraftArg(name, argsInput.value);
+          vscode.postMessage({ type: 'saveRun', recipe: name, args: argsInput.value });
+        });
+        actions.appendChild(saveBtn);
+      }
+      const runBtn = document.createElement('button');
+      runBtn.className = 'run';
+      runBtn.type = 'button';
+      runBtn.textContent = 'Run';
+      runBtn.title = showArgs
+        ? 'Run in terminal (recipe plus arguments below)'
+        : 'Run in terminal';
+      runBtn.addEventListener('click', () =>
+        vscode.postMessage({
+          type: 'run',
+          recipe: name,
+          args: showArgs && argsInput ? argsInput.value : '',
+        }),
+      );
+      actions.appendChild(runBtn);
+      top.appendChild(nm);
+      top.appendChild(actions);
+      block.appendChild(top);
+      if (showArgs && argsInput) {
+        block.appendChild(argsInput);
+      }
+      parent.appendChild(block);
+    }
+
+    function appendSavedRow(parent, entry) {
+      const block = document.createElement('div');
+      block.className = 'recipe-block';
+      const top = document.createElement('div');
+      top.className = 'recipe-top';
+      const nm = document.createElement('span');
+      nm.className = 'name';
+      const cmd = entry.args && String(entry.args).trim()
+        ? entry.recipe + ' ' + String(entry.args).trim()
+        : entry.recipe;
+      nm.textContent = cmd;
+      nm.title = 'just ' + cmd;
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      const runBtn = document.createElement('button');
+      runBtn.className = 'run';
+      runBtn.type = 'button';
+      runBtn.textContent = 'Run';
+      runBtn.title = 'Run in terminal';
+      runBtn.addEventListener('click', () =>
+        vscode.postMessage({
+          type: 'run',
+          recipe: entry.recipe,
+          args: entry.args != null ? String(entry.args) : '',
+        }),
+      );
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'remove';
+      removeBtn.type = 'button';
+      removeBtn.textContent = 'Remove';
+      removeBtn.title = 'Remove saved command';
+      removeBtn.addEventListener('click', () =>
+        vscode.postMessage({ type: 'deleteSaved', id: entry.id }),
+      );
+      actions.appendChild(runBtn);
+      actions.appendChild(removeBtn);
+      top.appendChild(nm);
+      top.appendChild(actions);
+      block.appendChild(top);
+      parent.appendChild(block);
+    }
+
+    function appendSectionHeading(block, title) {
+      const h = document.createElement('div');
+      h.className = 'group-heading';
+      h.textContent = title;
+      block.appendChild(h);
+    }
+
+    function render() {
+      const q = (filterEl.value || '').trim().toLowerCase();
+      listEl.textContent = '';
+      let rendered = 0;
+      const pinNames = q ? pinnedRecipes.filter((n) => n.toLowerCase().includes(q)) : pinnedRecipes;
+      if (pinNames.length > 0) {
+        const block = document.createElement('div');
+        block.className = 'pinned-block';
+        appendSectionHeading(block, 'Pinned');
+        listEl.appendChild(block);
+        for (const name of pinNames) {
+          appendRecipeBlock(block, name, true, argHints[name]);
+          rendered += 1;
+        }
+      }
+      const savedFiltered = q
+        ? savedCommands.filter((s) =>
+            (s.recipe + ' ' + (s.args || '')).toLowerCase().includes(q),
+          )
+        : savedCommands;
+      if (savedFiltered.length > 0) {
+        const sblock = document.createElement('div');
+        sblock.className = 'saved-block';
+        appendSectionHeading(sblock, 'Saved');
+        listEl.appendChild(sblock);
+        for (const entry of savedFiltered) {
+          appendSavedRow(sblock, entry);
+          rendered += 1;
+        }
+      }
+      for (const g of allGroups) {
+        const recipes = Array.isArray(g.recipes) ? g.recipes : [];
+        const filtered = q ? recipes.filter((r) => r.name.toLowerCase().includes(q)) : recipes;
+        if (filtered.length === 0) {
+          continue;
+        }
+        const card = document.createElement('div');
+        card.className = 'recipe-group-card';
+        card.dataset.tone = String(groupToneIndex(g.label));
+        appendSectionHeading(card, g.label);
+        for (const r of filtered) {
+          appendRecipeBlock(card, r.name, false, r.acceptsArgs);
+          rendered += 1;
+        }
+        listEl.appendChild(card);
+      }
+      const hadSource =
+        pinnedRecipes.length > 0 ||
+        savedCommands.length > 0 ||
+        allGroups.some((g) => g.recipes && g.recipes.length > 0);
+      if (hadSource && rendered === 0 && q) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-hint';
+        empty.textContent = 'No recipes match the filter.';
+        listEl.appendChild(empty);
+      }
+    }
+
+    filterEl.addEventListener('input', render);
+
+    window.addEventListener('message', (event) => {
+      const msg = event.data;
+      if (msg.type === 'recipes') {
+        allGroups = Array.isArray(msg.groups) ? msg.groups : [];
+        pinnedRecipes = Array.isArray(msg.pinned) ? msg.pinned : [];
+        savedCommands = Array.isArray(msg.saved) ? msg.saved : [];
+        recipeCount = typeof msg.recipeCount === 'number' ? msg.recipeCount : 0;
+        argHints = msg.argHints && typeof msg.argHints === 'object' ? msg.argHints : {};
+        metaEl.textContent = '';
+        if (msg.cwd) {
+          const cwdLine = document.createElement('span');
+          cwdLine.className = 'cwd';
+          cwdLine.textContent = msg.cwd;
+          metaEl.appendChild(cwdLine);
+          const stats = document.createElement('span');
+          stats.className = 'stats';
+          const parts = [];
+          if (recipeCount > 0) {
+            parts.push(recipeCount + ' recipe' + (recipeCount === 1 ? '' : 's'));
+          }
+          if (pinnedRecipes.length > 0) {
+            parts.push(pinnedRecipes.length + ' pinned');
+          }
+          if (savedCommands.length > 0) {
+            parts.push(savedCommands.length + ' saved');
+          }
+          if (parts.length > 0) {
+            stats.textContent = parts.join(' · ');
+            metaEl.appendChild(stats);
+          }
+        }
+        if (msg.error) {
+          errEl.style.display = 'block';
+          errEl.textContent = msg.error;
+        } else {
+          errEl.style.display = 'none';
+          errEl.textContent = '';
+        }
+        render();
+      }
+    });
+
+    vscode.postMessage({ type: 'ready' });
+  </script>
+</body>
+</html>

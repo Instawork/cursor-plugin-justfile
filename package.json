@@ -1,0 +1,68 @@
+{
+  "name": "justfile-runner",
+  "displayName": "Justfile Runner",
+  "description": "Side panel listing just recipes from the workspace justfile with run buttons.",
+  "version": "0.3.0",
+  "publisher": "justfilerunner",
+  "license": "MIT",
+  "keywords": ["just", "justfile", "task runner", "terminal"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "workspaceContains:**/justfile",
+    "workspaceContains:**/Justfile",
+    "onView:justfile-runner.panel",
+    "onCommand:justfileRunner.refresh"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "justfile-runner",
+          "title": "Just",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "justfile-runner": [
+        {
+          "type": "webview",
+          "id": "justfile-runner.panel",
+          "name": "Recipes"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "justfileRunner.refresh",
+        "title": "Refresh just recipes",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "justfileRunner.refresh",
+          "when": "view == justfile-runner.panel",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vsix": "npm run compile && vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.4.0"
+  }
+}
