@@ -4,6 +4,10 @@
   "description": "Side panel listing just recipes from the workspace justfile with run buttons.",
   "version": "0.3.0",
   "publisher": "justfilerunner",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Instawork/cursor-plugin-justfile.git"
+  },
   "license": "MIT",
   "keywords": ["just", "justfile", "task runner", "terminal"],
   "engines": {
