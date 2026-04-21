@@ -13,8 +13,22 @@ const SEARCH_RELATED_COMMANDS = new Set<string>([
   "workbench.action.replaceInFiles",
 ]);
 
-/** Best-effort: updated when `commands.onDidExecuteCommand` exists (see `wireSidebarViewletTracking`). */
+/** Commands that move focus away from the activity bar without necessarily using `workbench.action.focus*`. */
+const CLEARS_ACTIVITY_BAR_FOCUS = new Set<string>([
+  "workbench.action.quickOpen",
+  "workbench.action.showCommands",
+  "workbench.action.togglePanel",
+]);
+
+/** Best-effort: updated when `commands.onDidExecuteCommand` exists (see `wireWorkbenchCommandReflection`). */
 let trackedSidebarViewlet: string | undefined;
+
+/**
+ * True when the user explicitly focused the activity bar (icon strip), e.g. via
+ * `workbench.action.focusActivityBar`. Cleared when other workbench focus commands or
+ * `workbench.view.*` run. Mouse-only activity bar use may not set this.
+ */
+let activityBarKeyboardFocus = false;
 
 let assistRunChain: Promise<void> = Promise.resolve();
 
@@ -85,10 +99,10 @@ function executedCommandId(e: unknown): string {
 }
 
 /**
- * Tracks the primary sidebar view container when the host exposes `commands.onDidExecuteCommand`
- * (not in stable typings, but present in some VS Code/Cursor builds). If absent, search gating is a no-op.
+ * Reflects workbench commands when the host exposes `commands.onDidExecuteCommand`
+ * (not in stable typings, but present in some VS Code/Cursor builds).
  */
-function wireSidebarViewletTracking(context: vscode.ExtensionContext): void {
+function wireWorkbenchCommandReflection(context: vscode.ExtensionContext): void {
   const commandsApi = vscode.commands as unknown as {
     onDidExecuteCommand?: (listener: (e: unknown) => void) => vscode.Disposable;
   };
@@ -103,12 +117,29 @@ function wireSidebarViewletTracking(context: vscode.ExtensionContext): void {
       if (!id) {
         return;
       }
+
+      if (id === "workbench.action.focusActivityBar") {
+        activityBarKeyboardFocus = true;
+        return;
+      }
+
+      if (CLEARS_ACTIVITY_BAR_FOCUS.has(id)) {
+        activityBarKeyboardFocus = false;
+      }
+
+      // Focus moved to another workbench region (editor, panel, sidebar, quick open, etc.).
+      if (id.startsWith("workbench.action.focus") && id !== "workbench.action.focusActivityBar") {
+        activityBarKeyboardFocus = false;
+      }
+
       if (SEARCH_RELATED_COMMANDS.has(id)) {
         trackedSidebarViewlet = SEARCH_VIEWLET;
+        activityBarKeyboardFocus = false;
         return;
       }
       if (id.startsWith("workbench.view.")) {
         trackedSidebarViewlet = id;
+        activityBarKeyboardFocus = false;
       }
     }),
   );
@@ -138,7 +169,15 @@ function shouldSkipForSearch(editor: vscode.TextEditor): boolean {
   return isSearchEditorTab(editor) || isSearchActivityViewOpen();
 }
 
+function shouldSkipForActivityBarFocus(): boolean {
+  return activityBarKeyboardFocus;
+}
+
 async function runExplorerAssist(): Promise<void> {
+  if (shouldSkipForActivityBarFocus()) {
+    return;
+  }
+
   const active = vscode.window.activeTextEditor;
   if (active && isSearchEditorTab(active)) {
     return;
@@ -168,7 +207,7 @@ async function runExplorerAssist(): Promise<void> {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  wireSidebarViewletTracking(context);
+  wireWorkbenchCommandReflection(context);
 
   let hadActiveEditor = false;
   let lastActiveDocumentKey: string | undefined;
@@ -196,6 +235,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     if (shouldSkipForSearch(editor)) {
+      return;
+    }
+
+    if (shouldSkipForActivityBarFocus()) {
       return;
     }
 
@@ -227,7 +270,9 @@ export function activate(context: vscode.ExtensionContext): void {
       setAssistConfig("autoCollapse", false),
     ),
     vscode.window.onDidChangeActiveTextEditor(() => {
-      considerRun();
+      setTimeout(() => {
+        considerRun();
+      }, 0);
     }),
   );
 }
