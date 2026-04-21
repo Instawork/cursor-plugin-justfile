@@ -1,0 +1,108 @@
+{
+  "name": "explorer-assist",
+  "displayName": "Explorer Assist",
+  "description": "Show the file explorer when you focus an editor, optionally collapse folders except paths for open tabs, with toggles on the Folders view toolbar.",
+  "version": "0.1.0",
+  "publisher": "explorerassist",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Instawork/cursor-plugins.git"
+  },
+  "license": "MIT",
+  "keywords": ["explorer", "sidebar", "files", "collapse"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:explorerAssist.focusOnExplorer.enable",
+    "onCommand:explorerAssist.focusOnExplorer.disable",
+    "onCommand:explorerAssist.autoCollapse.enable",
+    "onCommand:explorerAssist.autoCollapse.disable"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "explorerAssist.focusOnExplorer.enable",
+        "title": "Turn on: focus Explorer when switching editors",
+        "shortTitle": "Focus",
+        "category": "Explorer Assist",
+        "icon": "$(circle-large-outline)"
+      },
+      {
+        "command": "explorerAssist.focusOnExplorer.disable",
+        "title": "Turn off: focus Explorer when switching editors",
+        "shortTitle": "Focus",
+        "category": "Explorer Assist",
+        "icon": "$(check)"
+      },
+      {
+        "command": "explorerAssist.autoCollapse.enable",
+        "title": "Turn on: auto-collapse tree to open tabs",
+        "shortTitle": "Collapse",
+        "category": "Explorer Assist",
+        "icon": "$(circle-large-outline)"
+      },
+      {
+        "command": "explorerAssist.autoCollapse.disable",
+        "title": "Turn off: auto-collapse tree to open tabs",
+        "shortTitle": "Collapse",
+        "category": "Explorer Assist",
+        "icon": "$(check)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "explorerAssist.focusOnExplorer.enable",
+          "when": "view == workbench.explorer.fileView && !config.explorerAssist.focusOnExplorer",
+          "group": "navigation@0"
+        },
+        {
+          "command": "explorerAssist.focusOnExplorer.disable",
+          "when": "view == workbench.explorer.fileView && config.explorerAssist.focusOnExplorer",
+          "group": "navigation@0"
+        },
+        {
+          "command": "explorerAssist.autoCollapse.enable",
+          "when": "view == workbench.explorer.fileView && !config.explorerAssist.autoCollapse",
+          "group": "navigation@1"
+        },
+        {
+          "command": "explorerAssist.autoCollapse.disable",
+          "when": "view == workbench.explorer.fileView && config.explorerAssist.autoCollapse",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Explorer Assist",
+      "properties": {
+        "explorerAssist.focusOnExplorer": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When you focus an editor tab, open the Explorer sidebar so the file tree is visible."
+        },
+        "explorerAssist.autoCollapse": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "After focusing an editor, collapse the file tree, then expand only folders needed for **open** editor tabs (file URIs)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vsix": "npm run compile && vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.4.0"
+  }
+}
