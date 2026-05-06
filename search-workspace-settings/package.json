@@ -1,0 +1,82 @@
+{
+  "name": "search-workspace-settings",
+  "displayName": "Search Workspace Settings",
+  "description": "Manage search, quick open, find-in-file, and workspace root settings from one panel.",
+  "version": "0.1.0",
+  "publisher": "searchworkspacesettings",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Instawork/cursor-plugins.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "search",
+    "workspace",
+    "quick open",
+    "settings"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "searchWorkspaceSettings.openPanel",
+        "title": "Search: Open Workspace Settings Panel",
+        "category": "Search Workspace Settings",
+        "icon": "$(settings-gear)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "searchWorkspaceSettings.openPanel",
+          "when": "view == searchView",
+          "group": "navigation@99"
+        },
+        {
+          "command": "searchWorkspaceSettings.openPanel",
+          "when": "view == searchWorkspaceSettings.view",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "search-workspace-settings",
+          "title": "Search Settings",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "search-workspace-settings": [
+        {
+          "type": "webview",
+          "id": "searchWorkspaceSettings.view",
+          "name": "Settings"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vsix": "npm run compile && vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.4.0"
+  }
+}
