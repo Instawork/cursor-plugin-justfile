@@ -49,7 +49,6 @@ function watchActiveTasks(context: vscode.ExtensionContext): void {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  openActiveTasksDb();
   host = new PanelHost(context.extensionUri, context);
   context.subscriptions.push({ dispose: () => host?.dispose() });
 
@@ -121,7 +120,18 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("activeTasks.popOut", () => {
-      host?.popOut();
+      if (!host) {
+        void vscode.window.showErrorMessage(
+          "Active Tasks is not ready yet. Run “Developer: Reload Window” and try again."
+        );
+        return;
+      }
+      try {
+        host.popOut();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        void vscode.window.showErrorMessage(`Active Tasks pop out failed: ${msg}`);
+      }
     })
   );
 
@@ -155,18 +165,42 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  watchActiveTasks(context);
+  context.subscriptions.push(
+    vscode.commands.registerCommand("activeTasks.consolidateWithAgent", () => {
+      if (!host) {
+        void vscode.window.showErrorMessage("Active Tasks is not ready.");
+        return;
+      }
+      void host.copyAgentConsolidationBrief();
+    })
+  );
+
+  let dbReady = false;
+  try {
+    openActiveTasksDb();
+    dbReady = true;
+    watchActiveTasks(context);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    void vscode.window.showErrorMessage(
+      `Active Tasks database failed to open: ${msg}`
+    );
+  }
 
   const discoveryTimer = setInterval(() => {
-    host?.pushUpdate({ forceDiscovery: true });
+    if (dbReady) {
+      host?.pushUpdate({ forceDiscovery: true });
+    }
   }, 5 * 60 * 1000);
   context.subscriptions.push({ dispose: () => clearInterval(discoveryTimer) });
 
-  try {
-    host.pushUpdate({ forceDiscovery: true });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Active Tasks failed to load: ${msg}`);
+  if (dbReady) {
+    try {
+      host?.pushUpdate({ forceDiscovery: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      void vscode.window.showErrorMessage(`Active Tasks failed to load: ${msg}`);
+    }
   }
 
   if (!hooksInstalled()) {

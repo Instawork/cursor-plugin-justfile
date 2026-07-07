@@ -32,7 +32,8 @@ export function activeTasksStatusBarText(payload: ActiveTasksPayload): string {
   const reconcileExtra =
     payload.discovery.missingPrs.length +
     payload.discovery.untrackedCloudAgents.length +
-    payload.discovery.staleTrackedPrs.length;
+    payload.discovery.staleTrackedPrs.length +
+    (payload.discovery.structuralMergeCandidates?.length ?? 0);
   if (!todos.length) {
     if (reconcileExtra) {
       return "$(checklist) Tasks +" + reconcileExtra;

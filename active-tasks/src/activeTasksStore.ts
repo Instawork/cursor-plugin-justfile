@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { execFileSync } from "child_process";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as os from "os";
@@ -130,10 +131,53 @@ function ensureSchema(db: Database.Database): void {
   ).run(String(SCHEMA_VERSION));
 }
 
+function tryImportLegacyTomlIfEmpty(): void {
+  const dbPath = activeTasksDbPath();
+  if (fs.existsSync(dbPath)) {
+    const probe = new Database(dbPath, { readonly: true });
+    try {
+      const row = probe
+        .prepare("SELECT COUNT(*) as c FROM active_work")
+        .get() as { c: number };
+      if (row.c > 0) {
+        return;
+      }
+    } catch {
+      /* empty or corrupt — import may still help */
+    } finally {
+      probe.close();
+    }
+  }
+  const scripts = [
+    path.join(
+      os.homedir(),
+      "code/cursor-contexts/scripts/active_tasks_db.py"
+    ),
+    path.join(__dirname, "..", "bundled", "hooks", "active_tasks_db.py"),
+  ];
+  const python = process.env.ACTIVE_TASKS_PYTHON || "python3.11";
+  const env = { ...process.env, ACTIVE_TASKS_DB_PATH: dbPath };
+  for (const script of scripts) {
+    if (!fs.existsSync(script)) {
+      continue;
+    }
+    try {
+      execFileSync(python, [script, "import-toml-if-empty"], {
+        stdio: "ignore",
+        env,
+      });
+      return;
+    } catch {
+      /* try next script */
+    }
+  }
+}
+
 export function openActiveTasksDb(): Database.Database {
   if (dbInstance) {
     return dbInstance;
   }
+  tryImportLegacyTomlIfEmpty();
   const dbPath = activeTasksDbPath();
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   dbInstance = new Database(dbPath);
@@ -350,6 +394,163 @@ export function insertWorkFromOpenPr(pr: OpenGitHubPr): string | null {
     updated_at: nowIso(),
   });
   return id;
+}
+
+function prEntryKey(pr: TaskPr): string {
+  const url = pr.url?.trim();
+  if (url) {
+    return url;
+  }
+  const repo = pr.repo ?? "";
+  return `${repo}#${pr.number}`;
+}
+
+function appendPr(list: TaskPr[], entry: TaskPr, seen: Set<string>): void {
+  const key = prEntryKey(entry);
+  if (seen.has(key)) {
+    return;
+  }
+  seen.add(key);
+  list.push(entry);
+}
+
+function rowPrimaryAsPr(row: DbRow): TaskPr | null {
+  if (row.pr_number === null || !row.pr_url?.trim()) {
+    return null;
+  }
+  return {
+    number: row.pr_number,
+    url: row.pr_url.trim(),
+    repo: row.repo,
+  };
+}
+
+/** Fold related rows into one initiative (extra PRs → prs_json). */
+export function mergeWorkRowsIntoPrimary(
+  primaryId: string,
+  mergeIds: string[]
+): boolean {
+  const sources = mergeIds.filter((id) => id && id !== primaryId);
+  if (!sources.length) {
+    return false;
+  }
+  const db = openActiveTasksDb();
+  const primary = db
+    .prepare("SELECT * FROM active_work WHERE id = ?")
+    .get(primaryId) as DbRow | undefined;
+  if (!primary) {
+    return false;
+  }
+
+  const merge = db.transaction(() => {
+    let prs = parseJsonArray<TaskPr>(primary.prs_json);
+    const links = parseJsonArray<TaskLink>(primary.links_json);
+    const seenPr = new Set<string>();
+    for (const p of prs) {
+      seenPr.add(prEntryKey(p));
+    }
+    let prNumber = primary.pr_number;
+    let prUrl = primary.pr_url;
+    let repo = primary.repo;
+    let branch = primary.branch;
+    let worktree = primary.worktree;
+    let notes = primary.notes?.trim() ?? "";
+    let sortOrder = primary.sort_order;
+    const linkSeen = new Set(links.map((l) => l.url.trim()));
+
+    for (const sourceId of sources) {
+      const row = db
+        .prepare("SELECT * FROM active_work WHERE id = ?")
+        .get(sourceId) as DbRow | undefined;
+      if (!row) {
+        continue;
+      }
+      sortOrder = Math.min(sortOrder, row.sort_order);
+
+      for (const p of parseJsonArray<TaskPr>(row.prs_json)) {
+        appendPr(prs, p, seenPr);
+      }
+      const sourcePrimary = rowPrimaryAsPr(row);
+      if (sourcePrimary) {
+        if (prNumber === null) {
+          prNumber = row.pr_number;
+          prUrl = row.pr_url;
+        } else {
+          appendPr(prs, sourcePrimary, seenPr);
+        }
+      }
+
+      if (!repo && row.repo) {
+        repo = row.repo;
+      }
+      if (!branch?.trim() && row.branch?.trim()) {
+        branch = row.branch.trim();
+      }
+      if (!worktree?.trim() && row.worktree?.trim()) {
+        worktree = row.worktree.trim();
+      }
+      const extraNotes = row.notes?.trim();
+      if (extraNotes && !notes.includes(extraNotes)) {
+        notes = notes ? `${notes}\n${extraNotes}` : extraNotes;
+      }
+      for (const link of parseJsonArray<TaskLink>(row.links_json)) {
+        const u = link.url?.trim();
+        if (u && !linkSeen.has(u)) {
+          linkSeen.add(u);
+          links.push(link);
+        }
+      }
+
+      db.prepare("DELETE FROM session_hidden WHERE work_id = ?").run(sourceId);
+      db.prepare("DELETE FROM active_work WHERE id = ?").run(sourceId);
+    }
+
+    if (prNumber !== null && prUrl) {
+      const trimmedUrl = prUrl.trim();
+      prs = prs.filter(
+        (p) =>
+          !(
+            p.number === prNumber &&
+            p.url.trim() === trimmedUrl &&
+            (p.repo === repo || !p.repo || !repo)
+          )
+      );
+    }
+
+    db.prepare(`
+      UPDATE active_work SET
+        sort_order = @sort_order,
+        repo = @repo,
+        branch = @branch,
+        worktree = @worktree,
+        notes = @notes,
+        pr_number = @pr_number,
+        pr_url = @pr_url,
+        prs_json = @prs_json,
+        links_json = @links_json,
+        updated_at = @updated_at
+      WHERE id = @id
+    `).run({
+      id: primaryId,
+      sort_order: sortOrder,
+      repo,
+      branch,
+      worktree,
+      notes: notes || null,
+      pr_number: prNumber,
+      pr_url: prUrl,
+      prs_json: JSON.stringify(prs),
+      links_json: JSON.stringify(links),
+      updated_at: nowIso(),
+    });
+  });
+
+  try {
+    merge();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function attachOpenPrToWork(

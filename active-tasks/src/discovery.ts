@@ -4,6 +4,7 @@ import {
   dismissDiscovery,
   insertWorkFromOpenPr,
   listDiscoveryDismissals,
+  mergeWorkRowsIntoPrimary,
 } from "./activeTasksStore";
 import type { CloudAgentThread } from "./cloudAgentThreads";
 import { fetchCloudAgentThreads } from "./cloudAgentThreads";
@@ -21,6 +22,11 @@ import {
   type WorkspaceMatch,
 } from "./workspaceContext";
 import * as vscode from "vscode";
+
+import type {
+  AgentConsolidationHint,
+  StructuralMergeCandidate,
+} from "./workConsolidation";
 
 export type StaleTrackedPr = {
   todoId: string;
@@ -41,6 +47,8 @@ export type TaskDiscoverySnapshot = {
   staleTrackedPrs: StaleTrackedPr[];
   prStatusByTodoId: Record<string, PrCheckSummary>;
   workspace: WorkspaceMatch;
+  structuralMergeCandidates: StructuralMergeCandidate[];
+  agentConsolidation: AgentConsolidationHint;
 };
 
 let cached: TaskDiscoverySnapshot | null = null;
@@ -214,6 +222,12 @@ function emptyDiscovery(workspace: WorkspaceMatch): TaskDiscoverySnapshot {
     staleTrackedPrs: [],
     prStatusByTodoId: {},
     workspace,
+    structuralMergeCandidates: [],
+    agentConsolidation: {
+      openCount: 0,
+      overRecommended: false,
+      brief: "",
+    },
   };
 }
 
@@ -265,6 +279,12 @@ async function scanDiscovery(
     staleTrackedPrs,
     prStatusByTodoId,
     workspace,
+    structuralMergeCandidates: [],
+    agentConsolidation: {
+      openCount: 0,
+      overRecommended: false,
+      brief: "",
+    },
   };
 }
 
@@ -325,4 +345,11 @@ export function reconcileAttachPr(workId: string, pr: OpenGitHubPr): boolean {
 
 export function reconcileDismissItem(kind: string, refKey: string): void {
   dismissDiscovery(kind, refKey);
+}
+
+export function reconcileMergeWorkRows(
+  primaryId: string,
+  mergeIds: string[]
+): boolean {
+  return mergeWorkRowsIntoPrimary(primaryId, mergeIds);
 }

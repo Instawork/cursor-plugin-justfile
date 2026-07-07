@@ -17,6 +17,10 @@ ACTIVE_TASKS_DB = Path(
 )
 RULE_PATH = Path.home() / ".cursor/rules/active-tasks.mdc"
 SCHEMA_PATH = Path.home() / "code/cursor-contexts/active-tasks.schema.toml"
+MERGE_CLI = (
+    "python3.11 ~/code/cursor-contexts/scripts/active_tasks_db.py "
+    "merge-work PRIMARY_UUID MERGE_UUID …"
+)
 
 
 def _load_db_module():
@@ -32,6 +36,21 @@ def _load_db_module():
     return mod
 
 
+def _agent_consolidation_block(pending: list[dict]) -> str:
+    if len(pending) <= 8:
+        return ""
+    id_lines = "\n".join(
+        f"- `{i['id']}` {i.get('title', i.get('label', ''))}" for i in pending
+    )
+    return (
+        f"\n\n**Consolidate (agent — {len(pending)} open, target 3–8):** "
+        "Decide which rows are the same initiative (semantic). Merge each group with:\n\n"
+        f"```bash\n{MERGE_CLI}\n```\n\n"
+        f"Row ids:\n{id_lines}\n\n"
+        "Or run `active_tasks_db.py consolidation-brief` · panel **Copy brief for Agent**.\n"
+    )
+
+
 def build_additional_context(items: list[dict]) -> str:
     pending = [i for i in items if not i.get("done")]
     done = [i for i in items if i.get("done")]
@@ -40,9 +59,12 @@ def build_additional_context(items: list[dict]) -> str:
     return (
         "## Active work (sessionStart)\n\n"
         f"Policy: `{RULE_PATH}` · fields: `{SCHEMA_PATH}` · DB: `{ACTIVE_TASKS_DB}`\n\n"
-        "Call **TodoWrite** once with `merge: false`: one todo per row below (use each **label** as "
+        "Call **TodoWrite** once with `merge: false`: one todo per **open** row below (use each **label** as "
         "`content`). Set `completed` only for **Already done**; all others `pending`.\n\n"
-        f"**Open ({len(pending)}):**\n{open_lines}\n\n"
+        "Keep **3–8** open initiatives. **Merging related work is agent judgment** (multi-repo, paired PRs); "
+        "the panel only auto-suggests duplicate branch/worktree/PR links.\n"
+        f"{_agent_consolidation_block(pending)}"
+        f"\n**Open ({len(pending)}):**\n{open_lines}\n\n"
         f"**Already done (DB or hidden this session):**\n{done_lines}"
     )
 

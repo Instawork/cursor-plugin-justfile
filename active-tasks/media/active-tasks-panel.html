@@ -2402,8 +2402,19 @@
             const cloud = disc.cloudAgents || [];
             const untrackedCloud = new Set((disc.untrackedCloudAgents || []).map((a) => a.agentId));
             const reconcileCount = missing.length + untrackedCloud.size + stale.length;
+            const structural = disc.structuralMergeCandidates || [];
+            const agentHint = disc.agentConsolidation || {};
+            const needsAgentConsolidate = Boolean(agentHint.overRecommended);
             const hasScan = Boolean(disc.scannedAt);
-            if (!hasScan && !reconcileCount && !cloud.length && !disc.githubError && !disc.cloudError) {
+            if (
+                !hasScan &&
+                !reconcileCount &&
+                !structural.length &&
+                !needsAgentConsolidate &&
+                !cloud.length &&
+                !disc.githubError &&
+                !disc.cloudError
+            ) {
                 return;
             }
 
@@ -2412,7 +2423,11 @@
 
             const details = document.createElement("details");
             details.className = "reconcile-details";
-            details.open = pillFilter === "needsReconcile" || reconcileCount > 0;
+            details.open =
+                pillFilter === "needsReconcile" ||
+                reconcileCount > 0 ||
+                structural.length > 0 ||
+                needsAgentConsolidate;
 
             const summary = document.createElement("summary");
             const summaryParts = ["Reconcile"];
@@ -2420,6 +2435,8 @@
             if (stale.length) summaryParts.push(stale.length + " stale");
             const agentCount = untrackedCloud.size;
             if (agentCount) summaryParts.push(agentCount + " agent");
+            if (structural.length) summaryParts.push(structural.length + " duplicate");
+            if (needsAgentConsolidate) summaryParts.push("consolidate (agent)");
             if (summaryParts.length === 1 && disc.scannedAt) {
                 summaryParts.push("up to date");
             }
@@ -2449,6 +2466,68 @@
 
             const cards = document.createElement("div");
             cards.className = "disc-cards";
+
+            if (needsAgentConsolidate || (agentHint.openCount && agentHint.openCount > 6)) {
+                const card = document.createElement("article");
+                card.className = "disc-card";
+                const title = document.createElement("p");
+                title.className = "disc-title";
+                title.textContent =
+                    "Consolidate with Agent · " +
+                    (agentHint.openCount || "?") +
+                    " open rows (target 3–8)";
+                card.appendChild(title);
+                const sub = document.createElement("p");
+                sub.className = "disc-hint";
+                sub.textContent =
+                    "Grouping related initiatives is semantic — use Agent to merge rows, not automatic title matching.";
+                card.appendChild(sub);
+                const actions = document.createElement("div");
+                actions.className = "disc-actions";
+                actions.appendChild(
+                    discActionBtn("Copy brief for Agent", () => {
+                        vscode.postMessage({ type: "copyAgentConsolidationBrief" });
+                    })
+                );
+                card.appendChild(actions);
+                cards.appendChild(card);
+            }
+
+            structural.slice(0, RECONCILE_CARD_CAP).forEach((sug) => {
+                const card = document.createElement("article");
+                card.className = "disc-card untracked";
+                const title = document.createElement("p");
+                title.className = "disc-title";
+                title.textContent =
+                    "Merge " +
+                    (1 + sug.mergeIds.length) +
+                    " rows · " +
+                    (sug.reason || "Related work");
+                card.appendChild(title);
+                const list = document.createElement("ul");
+                list.className = "disc-hint";
+                list.style.margin = "0.35rem 0 0";
+                list.style.paddingLeft = "1.1rem";
+                (sug.titles || []).forEach((t) => {
+                    const li = document.createElement("li");
+                    li.textContent = t;
+                    list.appendChild(li);
+                });
+                card.appendChild(list);
+                const actions = document.createElement("div");
+                actions.className = "disc-actions";
+                actions.appendChild(
+                    discActionBtn("Merge duplicates", () => {
+                        vscode.postMessage({
+                            type: "mergeWorkRows",
+                            primaryId: sug.primaryId,
+                            mergeIds: sug.mergeIds,
+                        });
+                    })
+                );
+                card.appendChild(actions);
+                cards.appendChild(card);
+            });
 
             stale.slice(0, RECONCILE_CARD_CAP).forEach((row) => {
                 const card = document.createElement("article");
@@ -2578,7 +2657,8 @@
             const hiddenReconcile =
                 Math.max(0, stale.length - RECONCILE_CARD_CAP) +
                 Math.max(0, missing.length - RECONCILE_CARD_CAP) +
-                Math.max(0, cloudVisible.length - RECONCILE_CARD_CAP);
+                Math.max(0, cloudVisible.length - RECONCILE_CARD_CAP) +
+                Math.max(0, structural.length - RECONCILE_CARD_CAP);
             if (hiddenReconcile > 0) {
                 const more = document.createElement("p");
                 more.className = "disc-hint";

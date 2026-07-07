@@ -19,12 +19,14 @@ import {
   reconcileAddPr,
   reconcileAttachPr,
   reconcileDismissItem,
+  reconcileMergeWorkRows,
 } from "./discovery";
 import {
   activeTasksStatusBarText,
   loadActiveTasksPayload,
   type ActiveTasksPayload,
 } from "./payload";
+import { enrichDiscoveryWithConsolidation } from "./workConsolidation";
 import { detectWorkspaceMatch } from "./workspaceContext";
 
 const VIEW_ID = "activeTasks.panel";
@@ -50,6 +52,17 @@ function tasksTooltip(payload: ActiveTasksPayload): vscode.MarkdownString {
   if (d.missingPrs.length || d.staleTrackedPrs.length) {
     md.appendMarkdown(
       `\n- Reconcile: **${d.missingPrs.length}** untracked PRs, **${d.staleTrackedPrs.length}** stale`
+    );
+  }
+  if (d.structuralMergeCandidates?.length) {
+    md.appendMarkdown(
+      `\n- Structural merges: **${d.structuralMergeCandidates.length}** duplicate links`
+    );
+  }
+  const agent = d.agentConsolidation;
+  if (agent?.overRecommended) {
+    md.appendMarkdown(
+      `\n- Agent consolidate: **${agent.openCount}** open rows (target 3–8)`
     );
   }
   md.appendMarkdown("\n\n---\n\n");
@@ -145,6 +158,21 @@ export class PanelHost {
     return detectWorkspaceMatch(vscode.workspace.workspaceFolders);
   }
 
+  async copyAgentConsolidationBrief(): Promise<void> {
+    const payload = loadActiveTasksPayload(this.workspaceContext());
+    const enriched = enrichDiscoveryWithConsolidation(
+      payload.discovery,
+      payload.activeTasks.todos
+    );
+    const brief =
+      enriched.agentConsolidation?.brief ??
+      "No open active work rows.";
+    await vscode.env.clipboard.writeText(brief);
+    void vscode.window.showInformationMessage(
+      "Active work consolidation brief copied — paste into Agent chat."
+    );
+  }
+
   pushUpdate(options?: {
     forceDiscovery?: boolean;
     skipDiscovery?: boolean;
@@ -171,7 +199,14 @@ export class PanelHost {
     skipDiscovery?: boolean;
   }): void {
     const workspace = this.workspaceContext();
-    const payload = loadActiveTasksPayload(workspace);
+    let payload = loadActiveTasksPayload(workspace);
+    payload = {
+      ...payload,
+      discovery: enrichDiscoveryWithConsolidation(
+        payload.discovery,
+        payload.activeTasks.todos
+      ),
+    };
     this.post({ type: "update", payload });
     this.statusBar.text = activeTasksStatusBarText(payload);
     this.statusBar.tooltip = tasksTooltip(payload);
@@ -192,7 +227,10 @@ export class PanelHost {
       }
       const next: ActiveTasksPayload = {
         ...loadActiveTasksPayload(workspace),
-        discovery,
+        discovery: enrichDiscoveryWithConsolidation(
+          discovery,
+          loadActiveTasksPayload(workspace).activeTasks.todos
+        ),
       };
       this.post({ type: "update", payload: next });
       this.statusBar.text = activeTasksStatusBarText(next);
@@ -348,6 +386,25 @@ export class PanelHost {
           removeTaskRow(msg.id);
           invalidateTaskDiscoveryCache();
           this.pushUpdate({ forceDiscovery: true });
+          return;
+        }
+        if (type === "copyAgentConsolidationBrief") {
+          void this.copyAgentConsolidationBrief();
+          return;
+        }
+        if (
+          type === "mergeWorkRows" &&
+          typeof msg.primaryId === "string" &&
+          Array.isArray(msg.mergeIds)
+        ) {
+          const mergeIds = msg.mergeIds.filter(
+            (x): x is string => typeof x === "string"
+          );
+          if (mergeIds.length) {
+            reconcileMergeWorkRows(msg.primaryId.trim(), mergeIds);
+            invalidateTaskDiscoveryCache();
+            this.pushUpdate({ forceDiscovery: true });
+          }
           return;
         }
         if (type === "quickAddWork" && typeof msg.title === "string") {
