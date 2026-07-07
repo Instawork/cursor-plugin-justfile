@@ -2,7 +2,7 @@
   "name": "active-tasks",
   "displayName": "Active Tasks",
   "description": "Sidebar for active work (SQLite) with GitHub/cloud reconcile and PR CI status.",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "publisher": "cursoractivetasks",
   "repository": {
     "type": "git",

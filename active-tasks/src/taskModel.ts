@@ -15,6 +15,7 @@ export type ParsedSessionTodo = {
   notes?: string;
   prs?: TaskPr[];
   links?: TaskLink[];
+  tags?: string[];
 };
 
 export type TaskFieldUpdate = {
@@ -26,6 +27,7 @@ export type TaskFieldUpdate = {
   notes?: string;
   pr_number?: number | null;
   pr_url?: string;
+  tags?: string[];
 };
 
 type ActiveWorkRow = Record<string, unknown>;
@@ -64,6 +66,14 @@ function formatExtras(row: ActiveWorkRow): string {
   }
   if (typeof row.notes === "string" && row.notes.trim()) {
     parts.push(row.notes.trim());
+  }
+  const tags = row.tags;
+  if (Array.isArray(tags)) {
+    for (const tag of tags) {
+      if (typeof tag === "string" && tag.trim()) {
+        parts.push("#" + tag.trim());
+      }
+    }
   }
   return parts.join(" ");
 }

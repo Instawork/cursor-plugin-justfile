@@ -59,6 +59,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
             pr_url TEXT,
             prs_json TEXT NOT NULL DEFAULT '[]',
             links_json TEXT NOT NULL DEFAULT '[]',
+            tags_json TEXT NOT NULL DEFAULT '[]',
             done INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL
         );
@@ -77,6 +78,41 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1')"
     )
+    _migrate_columns(conn)
+
+
+def _migrate_columns(conn: sqlite3.Connection) -> None:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(active_work)")}
+    if "tags_json" not in cols:
+        conn.execute(
+            "ALTER TABLE active_work ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    conn.commit()
+
+
+def _parse_tags_json(raw: str | None) -> list[str]:
+    if not raw or not raw.strip():
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in parsed:
+        if not isinstance(item, str):
+            continue
+        t = " ".join(item.strip().split())
+        if not t or len(t) > 64:
+            continue
+        key = t.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+    return out
 
 
 def _format_title(task: dict[str, Any]) -> str:
@@ -106,6 +142,8 @@ def _format_extras(task: dict[str, Any]) -> str:
     notes = task.get("notes")
     if isinstance(notes, str) and notes.strip():
         parts.append(notes.strip())
+    for tag in _parse_tags_json(task.get("tags_json")):
+        parts.append("#" + tag)
     return " ".join(parts)
 
 
@@ -142,7 +180,7 @@ def validate_row(row: sqlite3.Row, index: int) -> None:
     pr_num = row["pr_number"]
     if pr_num is not None and not isinstance(pr_num, int):
         raise ActiveTasksValidationError(f"active_work[{index}].pr_number must be int")
-    for field in ("prs_json", "links_json"):
+    for field in ("prs_json", "links_json", "tags_json"):
         raw = row[field]
         try:
             parsed = json.loads(raw or "[]")
@@ -154,6 +192,12 @@ def validate_row(row: sqlite3.Row, index: int) -> None:
             raise ActiveTasksValidationError(
                 f"active_work[{index}].{field} must be a JSON array"
             )
+        if field == "tags_json":
+            for j, tag in enumerate(parsed):
+                if not isinstance(tag, str) or not tag.strip():
+                    raise ActiveTasksValidationError(
+                        f"active_work[{index}].tags_json[{j}] must be non-empty string"
+                    )
     prs = json.loads(row["prs_json"] or "[]")
     for j, pr in enumerate(prs):
         if not isinstance(pr, dict):
@@ -214,6 +258,9 @@ def row_to_item(row: sqlite3.Row) -> dict[str, Any]:
     links = json.loads(row["links_json"] or "[]")
     if links:
         item["links"] = links
+    tags = _parse_tags_json(row["tags_json"] if row["tags_json"] else "[]")
+    if tags:
+        item["tags"] = tags
     return item
 
 
@@ -298,8 +345,8 @@ def import_toml_if_empty(toml_path: Path | None = None) -> int:
         insert_sql = """
             INSERT INTO active_work (
               id, sort_order, title, status, repo, branch, worktree, notes,
-              pr_number, pr_url, prs_json, links_json, done, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              pr_number, pr_url, prs_json, links_json, tags_json, done, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
         imported = 0
         for index, raw in enumerate(rows):
@@ -345,6 +392,7 @@ def import_toml_if_empty(toml_path: Path | None = None) -> int:
                     else None,
                     json.dumps(prs),
                     links,
+                    "[]",
                     1 if raw.get("done") else 0,
                     ts,
                 ),
@@ -396,6 +444,18 @@ def merge_work_rows(primary_id: str, *merge_ids: str) -> bool:
         worktree = primary["worktree"]
         notes = (primary["notes"] or "").strip()
         sort_order = primary["sort_order"]
+        tag_keys: set[str] = set()
+        merged_tags: list[str] = []
+
+        def add_tag(tag: str) -> None:
+            key = tag.lower()
+            if key in tag_keys:
+                return
+            tag_keys.add(key)
+            merged_tags.append(tag)
+
+        for t in _parse_tags_json(primary["tags_json"]):
+            add_tag(t)
 
         for source_id in sources:
             row = conn.execute(
@@ -440,6 +500,8 @@ def merge_work_rows(primary_id: str, *merge_ids: str) -> bool:
                 if u and u not in link_seen:
                     link_seen.add(u)
                     links.append(link)
+            for t in _parse_tags_json(row["tags_json"]):
+                add_tag(t)
             conn.execute("DELETE FROM session_hidden WHERE work_id = ?", (source_id,))
             conn.execute("DELETE FROM active_work WHERE id = ?", (source_id,))
 
@@ -460,7 +522,7 @@ def merge_work_rows(primary_id: str, *merge_ids: str) -> bool:
             """
             UPDATE active_work SET
               sort_order = ?, repo = ?, branch = ?, worktree = ?, notes = ?,
-              pr_number = ?, pr_url = ?, prs_json = ?, links_json = ?, updated_at = ?
+              pr_number = ?, pr_url = ?, prs_json = ?, links_json = ?, tags_json = ?, updated_at = ?
             WHERE id = ?
             """,
             (
@@ -473,6 +535,7 @@ def merge_work_rows(primary_id: str, *merge_ids: str) -> bool:
                 pr_url,
                 json.dumps(prs),
                 json.dumps(links),
+                json.dumps(merged_tags),
                 ts,
                 primary_id,
             ),

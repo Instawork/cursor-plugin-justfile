@@ -6,6 +6,7 @@ import {
   getMeta,
   insertWorkFromQuickAdd as insertWorkFromQuickAddInDb,
   loadTodosFromDb,
+  listTagVocab,
   reorderTasksInDb,
   setSessionHidden,
   setTaskDoneInDb,
@@ -21,6 +22,7 @@ export type ActiveTasksSnapshot = {
   sessionId: string | null;
   source: string | null;
   tasks: string[];
+  tagVocab: string[];
   todos: SessionTodo[];
 };
 
@@ -31,6 +33,7 @@ export function loadActiveTasks(): ActiveTasksSnapshot {
     sessionId: getMeta("last_session_id"),
     source: activeTasksDbPath(),
     tasks: todos.map((t) => t.label),
+    tagVocab: listTagVocab(),
     todos,
   };
 }

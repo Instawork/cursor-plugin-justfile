@@ -12,8 +12,10 @@ import {
   type TaskPr,
 } from "./taskModel";
 import type { OpenGitHubPr } from "./githubOpenPrs";
+import { parseTagsJson, sanitizeTags } from "./tagsUtil";
 
 const SCHEMA_VERSION = 1;
+const TAG_VOCAB_META = "tag_vocab";
 const VALID_REPOS = new Set(["instawork", "finch", "infrastructure"]);
 
 export function activeTasksDbPath(): string {
@@ -36,6 +38,7 @@ type DbRow = {
   pr_url: string | null;
   prs_json: string;
   links_json: string;
+  tags_json: string;
   done: number;
   updated_at: string;
 };
@@ -62,6 +65,7 @@ function parseJsonArray<T>(raw: string): T[] {
 function rowToTodo(row: DbRow): ParsedSessionTodo {
   const prs = parseJsonArray<TaskPr>(row.prs_json);
   const links = parseJsonArray<TaskLink>(row.links_json);
+  const tags = parseTagsJson(row.tags_json ?? "[]");
   const activeRow: Record<string, unknown> = {
     title: row.title,
     status: row.status,
@@ -73,6 +77,7 @@ function rowToTodo(row: DbRow): ParsedSessionTodo {
     pr_url: row.pr_url ?? undefined,
     prs: prs.length ? prs : undefined,
     links: links.length ? links : undefined,
+    tags: tags.length ? tags : undefined,
     done: Boolean(row.done),
   };
   const label = taskRowToLabel(activeRow);
@@ -90,6 +95,7 @@ function rowToTodo(row: DbRow): ParsedSessionTodo {
     notes: row.notes ?? undefined,
     prs: prs.length ? prs : undefined,
     links: links.length ? links : undefined,
+    tags: tags.length ? tags : undefined,
   };
 }
 
@@ -112,6 +118,7 @@ function ensureSchema(db: Database.Database): void {
       pr_url TEXT,
       prs_json TEXT NOT NULL DEFAULT '[]',
       links_json TEXT NOT NULL DEFAULT '[]',
+      tags_json TEXT NOT NULL DEFAULT '[]',
       done INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     );
@@ -129,6 +136,49 @@ function ensureSchema(db: Database.Database): void {
   db.prepare(
     "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)"
   ).run(String(SCHEMA_VERSION));
+  migrateSchemaColumns(db);
+}
+
+function migrateSchemaColumns(db: Database.Database): void {
+  const cols = db
+    .prepare("PRAGMA table_info(active_work)")
+    .all() as { name: string }[];
+  if (!cols.some((c) => c.name === "tags_json")) {
+    db.exec(
+      `ALTER TABLE active_work ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'`
+    );
+  }
+}
+
+function collectTagsFromDb(db: Database.Database): string[] {
+  const set = new Set<string>();
+  const metaRow = db
+    .prepare("SELECT value FROM meta WHERE key = ?")
+    .get(TAG_VOCAB_META) as { value: string } | undefined;
+  for (const t of parseTagsJson(metaRow?.value ?? "[]")) {
+    set.add(t);
+  }
+  const rows = db
+    .prepare("SELECT tags_json FROM active_work")
+    .all() as { tags_json: string }[];
+  for (const row of rows) {
+    for (const t of parseTagsJson(row.tags_json)) {
+      set.add(t);
+    }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+export function refreshTagVocab(): string[] {
+  const db = openActiveTasksDb();
+  const vocab = collectTagsFromDb(db);
+  setMeta(TAG_VOCAB_META, JSON.stringify(vocab));
+  return vocab;
+}
+
+export function listTagVocab(): string[] {
+  const db = openActiveTasksDb();
+  return collectTagsFromDb(db);
 }
 
 function tryImportLegacyTomlIfEmpty(): void {
@@ -302,14 +352,20 @@ export function updateTaskFieldsInDb(
   if (fields.pr_url !== undefined) {
     next.pr_url = fields.pr_url.trim() || null;
   }
+  if (fields.tags !== undefined) {
+    next.tags_json = JSON.stringify(sanitizeTags(fields.tags));
+  }
   next.updated_at = nowIso();
   db.prepare(`
     UPDATE active_work SET
       title = @title, status = @status, repo = @repo, branch = @branch,
       worktree = @worktree, notes = @notes, pr_number = @pr_number,
-      pr_url = @pr_url, updated_at = @updated_at
+      pr_url = @pr_url, tags_json = @tags_json, updated_at = @updated_at
     WHERE id = @id
   `).run(next);
+  if (fields.tags !== undefined) {
+    refreshTagVocab();
+  }
   return true;
 }
 
@@ -457,6 +513,19 @@ export function mergeWorkRowsIntoPrimary(
     let notes = primary.notes?.trim() ?? "";
     let sortOrder = primary.sort_order;
     const linkSeen = new Set(links.map((l) => l.url.trim()));
+    const tagKeys = new Set<string>();
+    const mergedTags: string[] = [];
+    const addTag = (tag: string): void => {
+      const key = tag.toLowerCase();
+      if (tagKeys.has(key)) {
+        return;
+      }
+      tagKeys.add(key);
+      mergedTags.push(tag);
+    };
+    for (const t of parseTagsJson(primary.tags_json ?? "[]")) {
+      addTag(t);
+    }
 
     for (const sourceId of sources) {
       const row = db
@@ -500,6 +569,9 @@ export function mergeWorkRowsIntoPrimary(
           links.push(link);
         }
       }
+      for (const tag of parseTagsJson(row.tags_json ?? "[]")) {
+        addTag(tag);
+      }
 
       db.prepare("DELETE FROM session_hidden WHERE work_id = ?").run(sourceId);
       db.prepare("DELETE FROM active_work WHERE id = ?").run(sourceId);
@@ -528,6 +600,7 @@ export function mergeWorkRowsIntoPrimary(
         pr_url = @pr_url,
         prs_json = @prs_json,
         links_json = @links_json,
+        tags_json = @tags_json,
         updated_at = @updated_at
       WHERE id = @id
     `).run({
@@ -541,12 +614,14 @@ export function mergeWorkRowsIntoPrimary(
       pr_url: prUrl,
       prs_json: JSON.stringify(prs),
       links_json: JSON.stringify(links),
+      tags_json: JSON.stringify(sanitizeTags(mergedTags)),
       updated_at: nowIso(),
     });
   });
 
   try {
     merge();
+    refreshTagVocab();
     return true;
   } catch {
     return false;
