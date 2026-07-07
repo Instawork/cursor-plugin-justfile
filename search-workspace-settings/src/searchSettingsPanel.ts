@@ -6,6 +6,21 @@ const VIEW_TYPE = "searchWorkspaceSettings.panel";
 export const ACTIVITY_VIEW_ID = "searchWorkspaceSettings.view";
 const ROOTS_STATE_KEY = "savedRoots";
 
+/** True when workspace-level settings can be written (not an empty single-window). */
+function canPersistToWorkspace(): boolean {
+  return (vscode.workspace.workspaceFolders?.length ?? 0) > 0 || vscode.workspace.workspaceFile !== undefined;
+}
+
+function warnIfNoWorkspace(): boolean {
+  if (canPersistToWorkspace()) {
+    return true;
+  }
+  void vscode.window.showWarningMessage(
+    "Open a folder or a .code-workspace file to save changes — workspace settings are not available in an empty window.",
+  );
+  return false;
+}
+
 type Source = "default" | "user" | "workspace" | "folder";
 type Kind = "boolean" | "number" | "enum" | "json";
 
@@ -263,7 +278,7 @@ async function saveSavedRoots(paths: string[]): Promise<void> {
 
 function collectRoots(): RootPill[] {
   const excludedPatterns = new Set(
-    readPatternItems("search", "exclude")
+    readPatternItems("files", "exclude")
       .filter((it) => it.enabled)
       .map((it) => it.pattern),
   );
@@ -348,6 +363,9 @@ class SharedHostActions {
   }
 
   private async updateSetting(section: string, key: string, kind: string, value: unknown): Promise<void> {
+    if (!warnIfNoWorkspace()) {
+      return;
+    }
     try {
       const cfg = vscode.workspace.getConfiguration(section);
       if (kind === "boolean") {
@@ -372,6 +390,9 @@ class SharedHostActions {
   }
 
   private async clearOverrides(section: string, key: string): Promise<void> {
+    if (!warnIfNoWorkspace()) {
+      return;
+    }
     try {
       const cfg = vscode.workspace.getConfiguration(section);
       await cfg.update(key, undefined, vscode.ConfigurationTarget.Workspace);
@@ -387,6 +408,9 @@ class SharedHostActions {
   }
 
   private async togglePattern(section: string, key: string, pattern: string, enabled: boolean): Promise<void> {
+    if (!warnIfNoWorkspace()) {
+      return;
+    }
     try {
       const items = readPatternItems(section, key);
       const idx = items.findIndex((it) => it.pattern === pattern);
@@ -401,6 +425,9 @@ class SharedHostActions {
   }
 
   private async addPattern(section: string, key: string, pattern: string): Promise<void> {
+    if (!warnIfNoWorkspace()) {
+      return;
+    }
     try {
       const items = readPatternItems(section, key);
       const idx = items.findIndex((it) => it.pattern === pattern);
@@ -417,6 +444,12 @@ class SharedHostActions {
   private async toggleRoot(path: string, active: boolean): Promise<void> {
     const folders = vscode.workspace.workspaceFolders ?? [];
     const idx = folders.findIndex((f) => f.uri.fsPath === path);
+    if (!active && idx < 0) {
+      return;
+    }
+    if (!warnIfNoWorkspace()) {
+      return;
+    }
     if (active) {
       if (idx < 0) {
         if (!existsSync(path)) {
@@ -429,14 +462,11 @@ class SharedHostActions {
           return;
         }
       }
-    } else if (idx < 0) {
-      // Can't scope search for a root not in workspace; keep behavior predictable.
-      return;
     }
 
-    // Root selection is now search-scope only: toggle via search.exclude, not workspace folders.
+    // Root "off" hides the root via files.exclude (workspace); does not remove the workspace folder.
     const pattern = rootExcludePattern(path);
-    const excludeItems = readPatternItems("search", "exclude");
+    const excludeItems = readPatternItems("files", "exclude");
     const excludeIdx = excludeItems.findIndex((it) => it.pattern === pattern);
     if (active) {
       if (excludeIdx >= 0) {
@@ -447,7 +477,7 @@ class SharedHostActions {
     } else {
       excludeItems.push({ pattern, enabled: true });
     }
-    await writePatternItems("search", "exclude", excludeItems);
+    await writePatternItems("files", "exclude", excludeItems);
 
     await saveSavedRoots([...readSavedRoots(), path]);
     this.postState();
@@ -526,28 +556,27 @@ export class SearchSettingsPanel {
 <meta http-equiv="Content-Security-Policy" content="${csp}" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);padding:14px;color:var(--vscode-foreground);background:var(--vscode-editor-background)}
-h1{font-size:14px;margin:0 0 8px 0}
-h2{font-size:12px;text-transform:uppercase;color:var(--vscode-descriptionForeground);border-bottom:1px solid var(--vscode-widget-border);padding-bottom:6px;margin-top:18px}
-.hint{font-size:11px;color:var(--vscode-descriptionForeground);margin:6px 0}
-.row{display:grid;grid-template-columns:1fr auto;gap:10px;padding:8px 0;border-bottom:1px solid var(--vscode-widget-border)}
-.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.badge{padding:2px 6px;border-radius:4px;background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:11px}
+body{font-family:var(--vscode-font-family);font-size:calc(var(--vscode-font-size) * .86);line-height:1.35;padding:8px 10px;color:var(--vscode-foreground);background:var(--vscode-editor-background)}
+h1{font-size:calc(1em + 1px);margin:0 0 6px 0}
+h2{font-size:.92em;text-transform:uppercase;letter-spacing:.02em;color:var(--vscode-descriptionForeground);border-bottom:1px solid var(--vscode-widget-border);padding-bottom:4px;margin-top:12px}
+.hint{font-size:.95em;opacity:.95;color:var(--vscode-descriptionForeground);margin:3px 0 0 0}
+.row{display:grid;grid-template-columns:1fr auto;gap:6px 8px;padding:5px 0;border-bottom:1px solid var(--vscode-widget-border)}
+.controls{display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.badge{padding:1px 5px;border-radius:3px;background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:.92em}
 input,select,textarea,button{font-family:inherit;font-size:inherit}
-input,select,textarea{background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-widget-border);border-radius:4px;padding:4px 6px}
-textarea{min-width:320px;min-height:72px;font-family:var(--vscode-editor-font-family);font-size:12px}
-button{background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:none;border-radius:4px;padding:4px 10px;cursor:pointer}
+input,select,textarea{background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-widget-border);border-radius:3px;padding:2px 5px}
+textarea{min-width:260px;min-height:56px;font-family:var(--vscode-editor-font-family);font-size:.95em}
+button{background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:none;border-radius:3px;padding:2px 7px;cursor:pointer}
 button.secondary{background:transparent;border:1px solid var(--vscode-widget-border);color:var(--vscode-textLink-foreground)}
-.pill-wrap{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
-.pill{border:1px solid var(--vscode-widget-border);background:var(--vscode-input-background);color:var(--vscode-input-foreground);padding:3px 10px;border-radius:999px;cursor:pointer}
+.pill-wrap{display:flex;flex-wrap:wrap;gap:5px;margin:5px 0}
+.pill{border:1px solid var(--vscode-widget-border);background:var(--vscode-input-background);color:var(--vscode-input-foreground);padding:2px 7px;border-radius:999px;cursor:pointer;font-size:inherit}
 .pill.off{opacity:.6;text-decoration:line-through}
-.line{display:flex;gap:8px;align-items:center}
-.line input{flex:1;min-width:220px}
+.line{display:flex;gap:5px;align-items:center;margin-top:2px}
+.line input{flex:1;min-width:180px}
 </style>
 </head>
 <body>
-<h1>Search & Workspace Settings</h1>
-<div class="hint">Click a pill to toggle. Inactive patterns are saved as <code>false</code> for that glob.</div>
+
 <div id="app"></div>
 <script nonce="${n}">
 const vscode = acquireVsCodeApi();

@@ -1,0 +1,89 @@
+{
+  "name": "side-dock",
+  "displayName": "Side Dock",
+  "description": "Activity bar slot plus an optional file strip in a narrow editor column (stays open like a second vertical strip).",
+  "version": "0.2.7",
+  "publisher": "sidedock",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Instawork/cursor-plugins.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "sidebar",
+    "activity bar",
+    "explorer",
+    "layout"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:side-dock.tree",
+    "onCommand:sideDock.refresh",
+    "onCommand:sideDock.openFilesStrip"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "side-dock",
+          "title": "Side Dock",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "side-dock": [
+        {
+          "id": "side-dock.tree",
+          "name": "Workspace"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sideDock.refresh",
+        "title": "Refresh Side Dock",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sideDock.openFilesStrip",
+        "title": "Open Files Strip (Editor Column)",
+        "category": "Side Dock",
+        "icon": "$(layout-sidebar-left)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sideDock.refresh",
+          "when": "view == side-dock.tree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sideDock.openFilesStrip",
+          "when": "view == side-dock.tree",
+          "group": "navigation@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vsix": "npm run compile && vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.4.0"
+  }
+}

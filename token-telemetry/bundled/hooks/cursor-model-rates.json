@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "defaultUsdPerM": 0.76,
+  "rules": [
+    { "id": "cursor-auto", "any": ["default", "auto"], "usdPerM": 0.33 },
+    {
+      "id": "fast-codex-composer",
+      "any": ["codex-fast", "composer", "-fast"],
+      "usdPerM": 0.94
+    },
+    { "id": "gemini-flash", "any": ["flash"], "usdPerM": 0.5 },
+    {
+      "id": "sonnet-medium",
+      "all": ["sonnet"],
+      "any": ["medium"],
+      "usdPerM": 0.91
+    },
+    { "id": "sonnet", "any": ["sonnet"], "usdPerM": 1.0 },
+    {
+      "id": "opus-48",
+      "any": ["opus-4-8", "opus-4.8", "4-8-thinking"],
+      "usdPerM": 1.5
+    },
+    { "id": "opus", "any": ["opus"], "usdPerM": 1.15 },
+    { "id": "gpt-fast", "all": ["gpt"], "any": ["fast"], "usdPerM": 0.94 },
+    { "id": "gpt-codex", "any": ["gpt-5", "codex"], "usdPerM": 0.76 }
+  ]
+}

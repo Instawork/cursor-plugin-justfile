@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en" class="__HTML_THEME_CLASS__">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="__CSP__" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="__CODICON_CSS__" />
+    <style>
+      /*
+       * Editor webviews often omit or break chained --vscode-* vars. Base UI uses only --sd-*.
+       * When real tokens exist, JS adds .sd-workbench and separate rules apply one var() each
+       * (invalid host values are dropped without killing the whole cascade).
+       */
+      html.vscode-dark {
+        --sd-bg: #1e1e1e;
+        --sd-fg: #cccccc;
+        --sd-muted: #858585;
+        --sd-hdr-bg: #252526;
+        --sd-hdr-fg: #bbbbbb;
+        --sd-border: #2b2b2b;
+        --sd-hover: #2a2d2e;
+        --sd-selection: #37373d;
+        --sd-focus: #007fd4;
+        --sd-icon: #c5c5c5;
+        --sd-git-modified: #e2c08d;
+        --sd-git-untracked: #73c991;
+        --sd-git-added: #73c991;
+        --sd-git-deleted: #c74e39;
+        --sd-git-renamed: #3794ff;
+        --sd-git-ignored: #8c8c8c;
+        --sd-git-conflicted: #e4676b;
+      }
+      html.vscode-light {
+        --sd-bg: #ffffff;
+        --sd-fg: #333333;
+        --sd-muted: #6a6a6a;
+        --sd-hdr-bg: #f3f3f3;
+        --sd-hdr-fg: #6f6f6f;
+        --sd-border: #e5e5e5;
+        --sd-hover: #e8e8e8;
+        --sd-selection: #e4e6f1;
+        --sd-focus: #0090f1;
+        --sd-icon: #424242;
+        --sd-git-modified: #895503;
+        --sd-git-untracked: #007100;
+        --sd-git-added: #007100;
+        --sd-git-deleted: #ad0707;
+        --sd-git-renamed: #006ab3;
+        --sd-git-ignored: #8c8c8c;
+        --sd-git-conflicted: #ad0707;
+      }
+      html.vscode-high-contrast {
+        --sd-bg: #000000;
+        --sd-fg: #ffffff;
+        --sd-muted: #cccccc;
+        --sd-hdr-bg: #000000;
+        --sd-hdr-fg: #ffffff;
+        --sd-border: #6fc3df;
+        --sd-hover: #0f4c85;
+        --sd-selection: #0f4c85;
+        --sd-focus: #f38518;
+        --sd-icon: #ffffff;
+        --sd-git-modified: #f5d28c;
+        --sd-git-untracked: #7fdbb0;
+        --sd-git-added: #7fdbb0;
+        --sd-git-deleted: #ff8989;
+        --sd-git-renamed: #9cdcfe;
+        --sd-git-ignored: #a8a8a8;
+        --sd-git-conflicted: #ff8989;
+      }
+      html.vscode-high-contrast-light {
+        --sd-bg: #ffffff;
+        --sd-fg: #292929;
+        --sd-muted: #292929;
+        --sd-hdr-bg: #ffffff;
+        --sd-hdr-fg: #292929;
+        --sd-border: #0f4c85;
+        --sd-hover: #e8dfc4;
+        --sd-selection: #e8dfc4;
+        --sd-focus: #0f4c85;
+        --sd-icon: #292929;
+        --sd-git-modified: #895503;
+        --sd-git-untracked: #007100;
+        --sd-git-added: #007100;
+        --sd-git-deleted: #ad0707;
+        --sd-git-renamed: #006ab3;
+        --sd-git-ignored: #6a6a6a;
+        --sd-git-conflicted: #ad0707;
+      }
+
+      html,
+      body {
+        margin: 0;
+        font: 13px/22px var(--vscode-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+        color: var(--sd-fg);
+        background-color: var(--sd-bg);
+        background-image: none;
+      }
+      html.sd-workbench body {
+        color: var(--vscode-editor-foreground);
+        background-color: var(--vscode-editor-background);
+      }
+
+      .hdr {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--sd-border);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--sd-hdr-fg);
+        background-color: var(--sd-hdr-bg);
+      }
+      html.sd-workbench .hdr {
+        border-bottom-color: var(--vscode-sideBarSectionHeader-border);
+        color: var(--vscode-sideBarSectionHeader-foreground);
+        background-color: var(--vscode-sideBarSectionHeader-background);
+      }
+      .hdr strong {
+        font-weight: 600;
+        color: inherit;
+        opacity: 0.92;
+      }
+
+      .tree {
+        padding: 2px 0 12px;
+        user-select: none;
+      }
+      .row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        min-height: 22px;
+        height: 22px;
+        padding: 0 8px 0 0;
+        margin: 0;
+        gap: 1px;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--sd-fg);
+        background-color: transparent;
+      }
+      html.sd-workbench .row {
+        color: var(--vscode-editor-foreground);
+      }
+      .row:hover {
+        background-color: var(--sd-hover);
+        color: var(--sd-fg);
+      }
+      html.sd-workbench .row:hover {
+        background-color: var(--vscode-list-hoverBackground);
+        color: var(--vscode-list-hoverForeground);
+      }
+      .row:focus-visible {
+        outline: 1px solid var(--sd-focus);
+        outline-offset: -1px;
+        background-color: var(--sd-hover);
+        color: var(--sd-fg);
+      }
+      html.sd-workbench .row:focus-visible {
+        outline-color: var(--vscode-focusBorder);
+        background-color: var(--vscode-list-focusBackground);
+        color: var(--vscode-list-focusForeground);
+      }
+
+      .twistie-wrap {
+        width: 16px;
+        height: 22px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .twistie {
+        font-size: 16px !important;
+        color: var(--sd-icon);
+        opacity: 0.9;
+      }
+      html.sd-workbench .twistie {
+        color: var(--vscode-icon-foreground);
+      }
+      .row:hover .twistie {
+        color: var(--sd-icon);
+      }
+      html.sd-workbench .row:hover .twistie {
+        color: var(--vscode-icon-foreground);
+      }
+      .twistie.ph {
+        opacity: 0.4;
+      }
+
+      .icon-cell {
+        width: 18px;
+        height: 22px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 2px;
+      }
+      .row.dir .icon-cell .codicon {
+        font-size: 16px !important;
+        color: var(--sd-icon);
+      }
+      .row:not(.dir) .icon-cell .codicon {
+        font-size: 16px !important;
+        color: var(--sd-icon);
+      }
+      html.sd-workbench .row.dir .icon-cell .codicon {
+        color: var(--vscode-symbolIcon-folderForeground);
+      }
+      html.sd-workbench .row:not(.dir) .icon-cell .codicon {
+        color: var(--vscode-symbolIcon-fileForeground);
+      }
+      .row:hover .icon-cell .codicon {
+        color: inherit;
+      }
+
+      .row .name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 13px;
+        color: inherit;
+      }
+      .row.dir .name {
+        font-weight: 400;
+      }
+
+      /* Git label colors (Explorer-style); one var per rule so host tokens do not break the cascade. */
+      .row.git-modified .name {
+        color: var(--sd-git-modified);
+      }
+      .row.git-untracked .name {
+        color: var(--sd-git-untracked);
+      }
+      .row.git-added .name {
+        color: var(--sd-git-added);
+      }
+      .row.git-deleted .name {
+        color: var(--sd-git-deleted);
+        text-decoration: line-through;
+        text-decoration-color: currentColor;
+      }
+      .row.git-renamed .name {
+        color: var(--sd-git-renamed);
+      }
+      .row.git-ignored .name {
+        color: var(--sd-git-ignored);
+        opacity: 0.85;
+      }
+      .row.git-conflicted .name {
+        color: var(--sd-git-conflicted);
+      }
+
+      html.sd-workbench .row.git-modified .name {
+        color: var(--vscode-gitDecoration-modifiedResourceForeground);
+      }
+      html.sd-workbench .row.git-untracked .name {
+        color: var(--vscode-gitDecoration-untrackedResourceForeground);
+      }
+      html.sd-workbench .row.git-added .name {
+        color: var(--vscode-gitDecoration-addedResourceForeground);
+      }
+      html.sd-workbench .row.git-deleted .name {
+        color: var(--vscode-gitDecoration-deletedResourceForeground);
+      }
+      html.sd-workbench .row.git-renamed .name {
+        color: var(--vscode-gitDecoration-renamedResourceForeground);
+      }
+      html.sd-workbench .row.git-ignored .name {
+        color: var(--vscode-gitDecoration-ignoredResourceForeground);
+      }
+      html.sd-workbench .row.git-conflicted .name {
+        color: var(--vscode-gitDecoration-conflictingResourceForeground);
+      }
+
+      html.sd-workbench .row.git-modified:hover .name {
+        color: var(--vscode-gitDecoration-modifiedResourceForeground);
+      }
+      html.sd-workbench .row.git-untracked:hover .name {
+        color: var(--vscode-gitDecoration-untrackedResourceForeground);
+      }
+      html.sd-workbench .row.git-added:hover .name {
+        color: var(--vscode-gitDecoration-addedResourceForeground);
+      }
+      html.sd-workbench .row.git-deleted:hover .name {
+        color: var(--vscode-gitDecoration-deletedResourceForeground);
+      }
+      html.sd-workbench .row.git-renamed:hover .name {
+        color: var(--vscode-gitDecoration-renamedResourceForeground);
+      }
+      html.sd-workbench .row.git-ignored:hover .name {
+        color: var(--vscode-gitDecoration-ignoredResourceForeground);
+      }
+      html.sd-workbench .row.git-conflicted:hover .name {
+        color: var(--vscode-gitDecoration-conflictingResourceForeground);
+      }
+
+      .row.git-modified:hover .name {
+        color: var(--sd-git-modified);
+      }
+      .row.git-untracked:hover .name {
+        color: var(--sd-git-untracked);
+      }
+      .row.git-added:hover .name {
+        color: var(--sd-git-added);
+      }
+      .row.git-deleted:hover .name {
+        color: var(--sd-git-deleted);
+      }
+      .row.git-renamed:hover .name {
+        color: var(--sd-git-renamed);
+      }
+      .row.git-ignored:hover .name {
+        color: var(--sd-git-ignored);
+      }
+      .row.git-conflicted:hover .name {
+        color: var(--sd-git-conflicted);
+      }
+
+      /* Active editor row: use list/selection foreground, not git label color. */
+      .row.row-active .name {
+        color: inherit;
+      }
+      html.sd-workbench .row.row-active .name {
+        color: inherit;
+      }
+
+      .row.row-active {
+        background-color: var(--sd-selection);
+        color: var(--sd-fg);
+        outline: 1px solid var(--sd-focus);
+        outline-offset: -1px;
+      }
+      html.sd-workbench .row.row-active {
+        background-color: var(--vscode-list-inactiveSelectionBackground);
+        color: var(--vscode-list-inactiveSelectionForeground);
+        outline-color: var(--vscode-list-inactiveFocusOutline);
+      }
+      .row.row-active .twistie {
+        color: var(--sd-icon);
+      }
+      html.sd-workbench .row.row-active .twistie {
+        color: var(--vscode-list-inactiveSelectionIconForeground);
+      }
+      .row.row-active.dir .icon-cell .codicon {
+        color: var(--sd-icon);
+      }
+      .row.row-active:not(.dir) .icon-cell .codicon {
+        color: var(--sd-icon);
+      }
+      html.sd-workbench .row.row-active.dir .icon-cell .codicon {
+        color: var(--vscode-symbolIcon-folderForeground);
+      }
+      html.sd-workbench .row.row-active:not(.dir) .icon-cell .codicon {
+        color: var(--vscode-symbolIcon-fileForeground);
+      }
+      .row.row-active:hover {
+        background-color: var(--sd-selection);
+        color: var(--sd-fg);
+      }
+      html.sd-workbench .row.row-active:hover {
+        background-color: var(--vscode-list-inactiveSelectionBackground);
+        color: var(--vscode-list-inactiveSelectionForeground);
+      }
+
+      .hint {
+        padding: 10px 8px;
+        font-size: 11px;
+        color: var(--sd-muted);
+        line-height: 1.45;
+      }
+      html.sd-workbench .hint {
+        color: var(--vscode-descriptionForeground);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hdr">
+      Side Dock — files (follows <strong>active editor</strong>). Resize the sash for a narrow column.
+    </div>
+    <div id="tree" class="tree"></div>
+    <script nonce="__NONCE__">
+      const vscode = acquireVsCodeApi();
+      const loaded = new Map();
+      const expanded = new Set();
+      let highlightRel = "";
+
+      function tryWorkbenchThemeColors() {
+        const root = document.documentElement;
+        root.classList.remove("sd-workbench");
+        const st = getComputedStyle(root);
+        const fg = st.getPropertyValue("--vscode-editor-foreground").trim();
+        const bg = st.getPropertyValue("--vscode-editor-background").trim();
+        const ok = (s) =>
+          s.length > 3 &&
+          s !== "transparent" &&
+          s !== "rgba(0, 0, 0, 0)" &&
+          !/^rgba\(0,\s*0,\s*0,\s*0\)$/i.test(s);
+        if (ok(fg) && ok(bg)) {
+          root.classList.add("sd-workbench");
+        }
+      }
+
+      function esc(s) {
+        const d = document.createElement("div");
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      function rowHtml(relPath, name, isDir, depth, iconCodicon, gitKind) {
+        let icon = iconCodicon || (isDir ? "codicon-folder" : "codicon-file");
+        if (isDir && expanded.has(relPath)) {
+          if (icon === "codicon-root-folder") {
+            icon = "codicon-root-folder-opened";
+          } else {
+            icon = "codicon-folder-opened";
+          }
+        }
+        const pad = 4 + depth * 8;
+        const chevInner = isDir
+          ? expanded.has(relPath)
+            ? '<span class="codicon codicon-chevron-down twistie"></span>'
+            : '<span class="codicon codicon-chevron-right twistie"></span>'
+          : '<span class="codicon codicon-blank twistie ph"></span>';
+        const active = !isDir && highlightRel && relPath === highlightRel ? " row-active" : "";
+        const gitClass = gitKind && typeof gitKind === "string" ? " git-" + gitKind : "";
+        const dirClass = (isDir ? "row dir" : "row") + active + gitClass;
+        return (
+          '<div class="' +
+          dirClass +
+          '" style="padding-left:' +
+          pad +
+          'px" data-rel="' +
+          esc(relPath) +
+          '" data-dir="' +
+          (isDir ? "1" : "0") +
+          '">' +
+          '<span class="twistie-wrap">' +
+          chevInner +
+          "</span>" +
+          '<span class="icon-cell"><span class="codicon ' +
+          icon +
+          '"></span></span>' +
+          '<span class="name">' +
+          esc(name) +
+          "</span></div>"
+        );
+      }
+
+      function walkHtml(parentRel, depth) {
+        const kids = loaded.get(parentRel);
+        if (!kids) return "";
+        let h = "";
+        for (const k of kids) {
+          h += rowHtml(k.relPath, k.name, k.isDirectory, depth, k.icon, k.git);
+          if (k.isDirectory && expanded.has(k.relPath)) {
+            if (loaded.has(k.relPath)) {
+              h += walkHtml(k.relPath, depth + 1);
+            } else {
+              vscode.postMessage({ type: "expand", relPath: k.relPath });
+            }
+          }
+        }
+        return h;
+      }
+
+      function paint() {
+        const tree = document.getElementById("tree");
+        const roots = loaded.get("");
+        if (!roots) {
+          tree.innerHTML = '<div class="hint">Loading…</div>';
+          return;
+        }
+        if (!Array.isArray(roots)) {
+          tree.innerHTML = '<div class="hint">Loading…</div>';
+          return;
+        }
+        if (roots.length === 0) {
+          tree.innerHTML = '<div class="hint">Nothing to show here yet.</div>';
+          return;
+        }
+        tree.innerHTML = walkHtml("", 0);
+        tree.querySelectorAll(".row.row-active").forEach((el) => {
+          el.scrollIntoView({ block: "nearest", inline: "nearest" });
+        });
+        tree.querySelectorAll(".row").forEach((el) => {
+          el.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            const rel = el.getAttribute("data-rel") || "";
+            const isDir = el.getAttribute("data-dir") === "1";
+            if (!isDir) {
+              vscode.postMessage({ type: "open", relPath: rel });
+              return;
+            }
+            if (expanded.has(rel)) expanded.delete(rel);
+            else expanded.add(rel);
+            paint();
+          });
+        });
+      }
+
+      window.addEventListener("message", (ev) => {
+        const m = ev.data;
+        if (m?.type === "theme" && typeof m.bodyClass === "string") {
+          document.documentElement.className = m.bodyClass;
+          tryWorkbenchThemeColors();
+          return;
+        }
+        if (m?.type === "hint") {
+          document.getElementById("tree").innerHTML = '<div class="hint">' + esc(m.message || "") + "</div>";
+          return;
+        }
+        if (m?.type === "children") {
+          loaded.set(m.parentRel ?? "", m.entries || []);
+          paint();
+        }
+        if (m?.type === "reveal") {
+          if (m.clear) {
+            highlightRel = "";
+            paint();
+            return;
+          }
+          highlightRel = typeof m.relPath === "string" ? m.relPath : "";
+          const prefs = Array.isArray(m.expandPrefixes) ? m.expandPrefixes : [];
+          prefs.forEach((p) => expanded.add(p));
+          paint();
+        }
+      });
+
+      tryWorkbenchThemeColors();
+      setTimeout(tryWorkbenchThemeColors, 0);
+      setTimeout(tryWorkbenchThemeColors, 120);
+      setTimeout(tryWorkbenchThemeColors, 400);
+
+      vscode.postMessage({ type: "ready" });
+    </script>
+  </body>
+</html>

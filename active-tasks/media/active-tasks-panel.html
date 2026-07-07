@@ -1,0 +1,2910 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Active tasks</title>
+    <style>
+        :root {
+            --bg: var(--vscode-sideBar-background, #f4f7f6);
+            --panel: var(--vscode-editor-background, #fff);
+            --ink: var(--vscode-foreground, #0f2744);
+            --muted: var(--vscode-descriptionForeground, #5a6b7d);
+            --border: var(--vscode-panel-border, #d8e3de);
+            --accent: var(--vscode-focusBorder, #0d9488);
+            --link: var(--vscode-textLink-foreground, #0d9488);
+            --hover: var(--vscode-list-hoverBackground, rgba(13, 148, 136, 0.08));
+            --mono: var(--vscode-editor-font-family, ui-monospace, monospace);
+            --radius: 10px;
+            --status-review-bg: rgba(59, 130, 246, 0.24);
+            --status-review-fg: #1e3a8a;
+            --status-progress-bg: rgba(245, 158, 11, 0.28);
+            --status-progress-fg: #7c2d12;
+            --status-blocked-bg: rgba(239, 68, 68, 0.24);
+            --status-blocked-fg: #7f1d1d;
+            --status-ready-bg: rgba(34, 197, 94, 0.24);
+            --status-ready-fg: #14532d;
+            --status-paused-bg: rgba(100, 116, 139, 0.25);
+            --status-paused-fg: #334155;
+            --iw: #2563eb;
+            --fn: #0d9488;
+            --if: #7c3aed;
+        }
+
+        body.vscode-dark,
+        body.vscode-high-contrast {
+            --status-review-fg: #93c5fd;
+            --status-progress-fg: #fcd34d;
+            --status-blocked-fg: #fca5a5;
+            --status-ready-fg: #86efac;
+            --status-paused-fg: #cbd5e1;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes pop {
+            from {
+                transform: rotate(45deg) scale(0.4);
+                opacity: 0;
+            }
+        }
+
+        @keyframes flashBorder {
+            0%,
+            100% {
+                border-color: var(--border);
+            }
+
+            40% {
+                border-color: var(--accent);
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                opacity: 0.45;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.45;
+            }
+        }
+
+        #reloadBtn.spinning {
+            animation: spin 0.8s linear infinite;
+        }
+
+        .stats-open.loading {
+            animation: shimmer 1.1s ease-in-out infinite;
+            color: var(--muted);
+        }
+
+        .task-card.kbd-focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+        }
+
+        .task-card.saved {
+            animation: flashBorder 0.9s ease;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: var(--vscode-font-family, ui-sans-serif, system-ui, sans-serif);
+            font-size: var(--vscode-font-size, 13px);
+            background: var(--bg);
+            color: var(--ink);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            line-height: 1.4;
+        }
+
+        .top {
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: .35rem;
+            padding: .45rem .6rem .35rem;
+            align-items: stretch;
+        }
+
+        .stats-bar {
+            height: 2px;
+            background: var(--border);
+            border-radius: 1px;
+            overflow: hidden;
+        }
+
+        .stats-bar-fill {
+            height: 100%;
+            width: 0;
+            background: var(--accent);
+            border-radius: 1px;
+            transition: width .35s ease;
+        }
+
+        .progress-wrap {
+            display: none;
+        }
+
+        .stats-copy {
+            min-width: 0;
+        }
+
+        .stats-title {
+            margin: 0;
+            font-size: .72rem;
+            font-weight: 650;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--muted);
+        }
+
+        .stats-open {
+            margin: .15rem 0 0;
+            font-size: 1.35rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+        }
+
+        .stats-sub {
+            margin: .1rem 0 0;
+            font-size: .82em;
+            color: var(--muted);
+        }
+
+        .repo-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .3rem;
+            padding: 0 .6rem .35rem;
+        }
+
+        .repo-summary .rs-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .28rem;
+            font-size: .74rem;
+            font-weight: 600;
+            border-radius: 999px;
+            padding: .08rem .5rem;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--muted);
+        }
+
+        .repo-summary .rs-chip .dot {
+            width: .5rem;
+            height: .5rem;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .repo-summary .rs-chip .rs-count {
+            font-variant-numeric: tabular-nums;
+            color: var(--ink);
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem .45rem;
+            align-items: center;
+            padding: 0 .55rem .55rem;
+        }
+
+        .seg {
+            display: inline-flex;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+            background: var(--bg);
+        }
+
+        .seg button {
+            border: none;
+            border-radius: 0;
+            background: transparent;
+            padding: .28rem .55rem;
+            font-size: .85em;
+            color: var(--muted);
+            box-shadow: none;
+        }
+
+        .seg button:not(:last-child) {
+            border-right: 1px solid var(--border);
+        }
+
+        .seg button.active {
+            background: var(--hover);
+            color: var(--ink);
+            font-weight: 650;
+        }
+
+        .seg-label {
+            font-size: .68rem;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--muted);
+            align-self: center;
+        }
+
+        .toolbar-actions {
+            margin-left: auto;
+            display: flex;
+            gap: .35rem;
+        }
+
+        .filter-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .3rem;
+            padding: 0 .55rem .45rem;
+            align-items: center;
+        }
+
+        .filter-pills .pill {
+            border: 1px solid var(--border);
+            background: var(--bg);
+            border-radius: 999px;
+            padding: .18rem .55rem;
+            font-size: .78em;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            line-height: 1.35;
+        }
+
+        .filter-pills .pill:hover {
+            background: var(--hover);
+            color: var(--ink);
+        }
+
+        .filter-pills .pill.active {
+            border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+            background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+            color: var(--ink);
+        }
+
+        .filter-pills .pill .pill-count {
+            margin-left: .25rem;
+            font-variant-numeric: tabular-nums;
+            opacity: .85;
+        }
+
+        .task-search {
+            display: flex;
+            align-items: center;
+            gap: .25rem;
+            padding: 0 .55rem .45rem;
+            flex: 1 1 100%;
+        }
+
+        .task-search input {
+            flex: 1;
+            min-width: 0;
+            font: inherit;
+            font-size: .85em;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: .28rem .45rem;
+            background: var(--panel);
+            color: var(--ink);
+        }
+
+        .task-search-clear {
+            padding: .2rem .45rem;
+            line-height: 1;
+        }
+
+        .task-search-clear.hidden {
+            display: none;
+        }
+
+        .reconcile-details {
+            margin-bottom: .85rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+            padding: .35rem .5rem .45rem;
+        }
+
+        .reconcile-details summary {
+            cursor: pointer;
+            font-size: .72rem;
+            font-weight: 650;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--muted);
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        .reconcile-details summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .reconcile-details summary::before {
+            content: "▸";
+            font-size: .85em;
+            transition: transform .15s ease;
+        }
+
+        .reconcile-details[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        .status-eyebrow {
+            display: block;
+            font-size: .66rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            margin-bottom: .12rem;
+            line-height: 1.2;
+        }
+
+        .status-eyebrow.tone-blocked {
+            color: var(--status-blocked-fg);
+        }
+
+        .status-eyebrow.tone-review {
+            color: var(--status-review-fg);
+        }
+
+        .status-eyebrow.tone-progress {
+            color: var(--status-progress-fg);
+        }
+
+        .status-eyebrow.tone-ready {
+            color: var(--status-ready-fg);
+        }
+
+        .status-eyebrow.tone-paused,
+        .status-eyebrow.tone-default {
+            color: var(--muted);
+        }
+
+        .quick-add {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+            align-items: center;
+            padding: 0 .55rem .55rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .quick-add input {
+            flex: 1 1 8rem;
+            min-width: 0;
+            font: inherit;
+            font-size: .9em;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: .32rem .45rem;
+            background: var(--panel);
+            color: var(--ink);
+        }
+
+        .quick-add select {
+            font: inherit;
+            font-size: .85em;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: .32rem .4rem;
+            background: var(--panel);
+            color: var(--ink);
+            max-width: 9rem;
+        }
+
+        .quick-add select,
+        .quick-add button[type="submit"] {
+            display: none;
+        }
+
+        .quick-add:focus-within select,
+        .quick-add:focus-within button[type="submit"],
+        .quick-add.has-text select,
+        .quick-add.has-text button[type="submit"] {
+            display: block;
+        }
+
+        .quick-add button.primary {
+            border-color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+            font-weight: 650;
+        }
+
+        .title-row {
+            display: flex;
+            align-items: flex-start;
+            gap: .35rem;
+            flex-wrap: wrap;
+        }
+
+        .title-row .todo-title {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .urgency-dot {
+            width: .45rem;
+            height: .45rem;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: .35rem;
+            border: 1px solid transparent;
+        }
+
+        .urgency-dot.high {
+            background: var(--status-blocked-fg);
+            box-shadow: 0 0 0 2px var(--status-blocked-bg);
+        }
+
+        .urgency-dot.medium {
+            background: var(--status-progress-fg);
+            box-shadow: 0 0 0 2px var(--status-progress-bg);
+        }
+
+        .urgency-dot.low {
+            background: var(--status-ready-fg);
+            box-shadow: 0 0 0 2px var(--status-ready-bg);
+        }
+
+        .urgency-dot.muted {
+            background: var(--muted);
+            opacity: .55;
+        }
+
+        .pr-count-badge {
+            font-size: .72em;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            border-radius: 999px;
+            padding: .06rem .38rem;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--muted);
+            flex-shrink: 0;
+            margin-top: .15rem;
+        }
+
+        .pr-count-badge.has-pr {
+            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+            color: var(--ink);
+        }
+
+        .foot kbd {
+            font-family: var(--mono);
+            font-size: .92em;
+            padding: .05rem .28rem;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--ink);
+        }
+
+        .foot .foot-hints {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem .65rem;
+            margin-bottom: .25rem;
+        }
+
+        @media (max-height: 500px) {
+            .foot-hints {
+                display: none;
+            }
+        }
+
+        .empty-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .4rem;
+            justify-content: center;
+            margin-top: .75rem;
+        }
+
+        .empty-actions button.primary {
+            border-color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+            font-weight: 650;
+        }
+
+        button {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            padding: .28rem .55rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: .88em;
+            color: var(--ink);
+        }
+
+        button:hover {
+            background: var(--hover);
+        }
+
+        button.ghost {
+            background: transparent;
+        }
+
+        .main {
+            flex: 1;
+            overflow-y: auto;
+            padding: .45rem .55rem .65rem;
+        }
+
+        .section {
+            margin-bottom: .85rem;
+        }
+
+        .section-head {
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            margin: 0 0 .4rem;
+            padding: 0 .1rem;
+        }
+
+        .section-head .sh-dot {
+            width: .55rem;
+            height: .55rem;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .section-head h2 {
+            margin: 0;
+            font-size: .72rem;
+            font-weight: 650;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--muted);
+        }
+
+        .section-count {
+            font-size: .72rem;
+            font-variant-numeric: tabular-nums;
+            color: var(--muted);
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: .05rem .4rem;
+        }
+
+        .disc-hint {
+            margin: 0 0 .45rem;
+            padding: 0 .1rem;
+            font-size: .82em;
+            color: var(--muted);
+            line-height: 1.35;
+        }
+
+        .disc-cards {
+            display: flex;
+            flex-direction: column;
+            gap: .35rem;
+            margin-bottom: .65rem;
+        }
+
+        .disc-card {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+            padding: .45rem .55rem;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: .35rem .5rem;
+            align-items: start;
+        }
+
+        .disc-card.untracked {
+            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+        }
+
+        .disc-title {
+            margin: 0;
+            font-weight: 600;
+            font-size: .92em;
+            line-height: 1.35;
+        }
+
+        .disc-title a {
+            color: var(--link);
+            text-decoration: none;
+        }
+
+        .disc-title a:hover {
+            text-decoration: underline;
+        }
+
+        .disc-meta {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+            font-size: .78em;
+            color: var(--muted);
+        }
+
+        .disc-pill {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: .05rem .4rem;
+            background: var(--bg);
+        }
+
+        .disc-pill.running {
+            border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .disc-actions {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: .3rem;
+            justify-content: flex-end;
+        }
+
+        .disc-actions button {
+            font-size: .78em;
+            padding: .2rem .45rem;
+        }
+
+        .ci-pill {
+            font-size: .74em;
+            font-weight: 650;
+            border-radius: 999px;
+            padding: .05rem .4rem;
+            border: 1px solid var(--border);
+        }
+
+        .ci-pill.success {
+            color: var(--status-ready-fg);
+            background: var(--status-ready-bg);
+        }
+
+        .ci-pill.failure {
+            color: var(--status-blocked-fg);
+            background: var(--status-blocked-bg);
+        }
+
+        .ci-pill.pending {
+            color: var(--status-progress-fg);
+            background: var(--status-progress-bg);
+        }
+
+        .modal-actions.stack {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .modal-actions.stack button {
+            width: 100%;
+            text-align: left;
+        }
+
+        .task-cards {
+            display: flex;
+            flex-direction: column;
+            gap: .4rem;
+            min-height: .5rem;
+        }
+
+        .task-card {
+            --card-accent: var(--accent);
+            position: relative;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: .5rem .55rem .52rem .4rem;
+            background: var(--panel);
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+            border-left: 3px solid var(--card-accent);
+            transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
+        }
+
+        .task-card:hover {
+            background: color-mix(in srgb, var(--panel) 92%, var(--hover));
+        }
+
+        .task-card.dragging {
+            opacity: .45;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+            will-change: transform;
+        }
+
+        .task-card.drop-before::before,
+        .task-card.drop-after::after {
+            content: "";
+            position: absolute;
+            left: .25rem;
+            right: .25rem;
+            height: 2px;
+            border-radius: 2px;
+            background: var(--accent);
+        }
+
+        .task-card.drop-before::before {
+            top: -.24rem;
+        }
+
+        .task-card.drop-after::after {
+            bottom: -.24rem;
+        }
+
+        .task-card.done {
+            --card-accent: var(--border);
+            opacity: 0.82;
+        }
+
+        .task-card.repo-instawork {
+            --card-accent: var(--iw);
+        }
+
+        .task-card.repo-finch {
+            --card-accent: var(--fn);
+        }
+
+        .task-card.repo-infrastructure {
+            --card-accent: var(--if);
+        }
+
+        .task-card.repo-unknown {
+            --card-accent: var(--muted);
+        }
+
+        #sectionsRoot.grouped .task-card .repo-badge {
+            display: none;
+        }
+
+        .task-card-head {
+            display: flex;
+            align-items: flex-start;
+            gap: .35rem;
+        }
+
+        .drag-handle {
+            flex-shrink: 0;
+            width: 1rem;
+            align-self: stretch;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            cursor: grab;
+            opacity: .35;
+            font-size: .9rem;
+            line-height: 1;
+            letter-spacing: -2px;
+            user-select: none;
+            transition: opacity .15s ease;
+        }
+
+        .task-card:hover .drag-handle {
+            opacity: .8;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .drag-handle.hidden {
+            display: none;
+        }
+
+        .check {
+            position: relative;
+            width: 1.15rem;
+            height: 1.15rem;
+            margin-top: .12rem;
+            flex-shrink: 0;
+        }
+
+        .check input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .check-box {
+            width: 100%;
+            height: 100%;
+            border: 1.5px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            transition: border-color .15s, background .15s;
+        }
+
+        .check input:checked+.check-box {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .check input:checked+.check-box::after {
+            content: "";
+            width: .35rem;
+            height: .6rem;
+            border: solid var(--panel);
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg) translate(-1px, -1px);
+            animation: pop 0.18s ease-out;
+        }
+
+        .check input:focus-visible+.check-box {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        .repo-badge {
+            width: 1.35rem;
+            height: 1.35rem;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: .02rem;
+            font-size: .75rem;
+            line-height: 1;
+            border: 1px solid var(--border);
+            background: var(--bg);
+        }
+
+        .repo-badge.repo-instawork {
+            color: var(--iw);
+            border-color: rgba(37, 99, 235, 0.35);
+            background: rgba(37, 99, 235, 0.12);
+        }
+
+        .repo-badge.repo-finch {
+            color: var(--fn);
+            border-color: rgba(13, 148, 136, 0.35);
+            background: rgba(13, 148, 136, 0.12);
+        }
+
+        .repo-badge.repo-infrastructure {
+            color: var(--if);
+            border-color: rgba(124, 58, 237, 0.35);
+            background: rgba(124, 58, 237, 0.12);
+        }
+
+        .repo-badge.repo-unknown {
+            color: var(--muted);
+            font-size: .65rem;
+            font-weight: 800;
+        }
+
+        .task-card-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .task-card.done .todo-title {
+            text-decoration: line-through;
+            color: var(--muted);
+        }
+
+        .todo-title {
+            font-weight: 650;
+            font-size: 1.02em;
+            line-height: 1.35;
+            word-break: break-word;
+            cursor: pointer;
+        }
+
+        .todo-title a {
+            color: var(--link);
+            text-decoration: none;
+        }
+
+        .todo-title a:hover {
+            text-decoration: underline;
+        }
+
+        .todo-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .28rem .35rem;
+            margin-top: .38rem;
+            align-items: center;
+        }
+
+        .todo-chip {
+            border-radius: 999px;
+            padding: .12rem .45rem;
+            font-size: .78em;
+            font-weight: 700;
+            letter-spacing: .01em;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+        }
+
+        .todo-chip.status {
+            background: var(--status-paused-bg);
+            color: var(--status-paused-fg);
+            border: 1px solid color-mix(in srgb, var(--status-paused-fg) 32%, transparent);
+        }
+
+        .todo-chip.status.review {
+            background: var(--status-review-bg);
+            color: var(--status-review-fg);
+            border-color: color-mix(in srgb, var(--status-review-fg) 35%, transparent);
+        }
+
+        .todo-chip.status.progress {
+            background: var(--status-progress-bg);
+            color: var(--status-progress-fg);
+            border-color: color-mix(in srgb, var(--status-progress-fg) 35%, transparent);
+        }
+
+        .todo-chip.status.blocked {
+            background: var(--status-blocked-bg);
+            color: var(--status-blocked-fg);
+            border-color: color-mix(in srgb, var(--status-blocked-fg) 35%, transparent);
+        }
+
+        .todo-chip.status.ready {
+            background: var(--status-ready-bg);
+            color: var(--status-ready-fg);
+            border-color: color-mix(in srgb, var(--status-ready-fg) 35%, transparent);
+        }
+
+        .todo-chip.repo {
+            font-family: var(--mono);
+            font-weight: 600;
+            border: 1px solid var(--border);
+        }
+
+        .todo-chip.repo.repo-instawork {
+            color: #1e3a8a;
+            background: rgba(37, 99, 235, 0.16);
+            border-color: rgba(37, 99, 235, 0.38);
+        }
+
+        .todo-chip.repo.repo-finch {
+            color: #0f766e;
+            background: rgba(13, 148, 136, 0.16);
+            border-color: rgba(13, 148, 136, 0.38);
+        }
+
+        .todo-chip.repo.repo-infrastructure {
+            color: #5b21b6;
+            background: rgba(124, 58, 237, 0.16);
+            border-color: rgba(124, 58, 237, 0.38);
+        }
+
+        .todo-chip.branch,
+        .todo-chip.worktree {
+            font-family: var(--mono);
+            font-weight: 500;
+            font-size: .74em;
+            background: transparent;
+            border: 1px dashed var(--border);
+            color: var(--muted);
+            cursor: pointer;
+            max-width: 14rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .meta-overflow.hidden {
+            display: none;
+        }
+
+        .meta-overflow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .25rem;
+            width: 100%;
+        }
+
+        .todo-chip.meta-more {
+            cursor: pointer;
+            opacity: .75;
+            font-weight: 650;
+        }
+
+        .todo-chip.meta-more.open {
+            opacity: 1;
+            border-color: var(--accent);
+        }
+
+        .disc-hint.stale-scan {
+            color: var(--status-progress-fg);
+        }
+
+        .todo-chip.branch:hover,
+        .todo-chip.worktree:hover {
+            color: var(--ink);
+            border-color: var(--accent);
+        }
+
+        .todo-chip.branch.copied {
+            color: var(--status-ready-fg);
+            border-color: var(--status-ready-fg);
+        }
+
+        .todo-chip.pr {
+            background: var(--bg);
+            border: 1px solid var(--border);
+        }
+
+        .todo-chip.pr a {
+            color: var(--link);
+            text-decoration: none;
+            font-weight: 650;
+        }
+
+        .todo-chip.pr.repo-instawork {
+            border-color: rgba(37, 99, 235, 0.4);
+        }
+
+        .todo-chip.pr.repo-instawork a {
+            color: var(--iw);
+        }
+
+        .todo-chip.pr.repo-finch {
+            border-color: rgba(13, 148, 136, 0.4);
+        }
+
+        .todo-chip.pr.repo-finch a {
+            color: var(--fn);
+        }
+
+        .todo-chip.pr.repo-infrastructure {
+            border-color: rgba(124, 58, 237, 0.4);
+        }
+
+        .todo-chip.pr.repo-infrastructure a {
+            color: var(--if);
+        }
+
+        .todo-chip.link {
+            background: var(--bg);
+            border: 1px solid var(--border);
+        }
+
+        .todo-chip.link a {
+            color: var(--link);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .todo-chip.link::before {
+            content: "↗";
+            font-size: .9em;
+            opacity: .7;
+        }
+
+        .todo-detail {
+            margin-top: .42rem;
+            font-size: .86em;
+            color: var(--muted);
+            line-height: 1.45;
+            word-break: break-word;
+        }
+
+        .todo-detail summary {
+            cursor: pointer;
+            color: var(--ink);
+            font-weight: 600;
+            font-size: .92em;
+            list-style: none;
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+        }
+
+        .todo-detail summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .todo-detail summary::before {
+            content: "▸";
+            font-size: .85em;
+            color: var(--muted);
+        }
+
+        .todo-detail[open] summary::before {
+            content: "▾";
+        }
+
+        .todo-detail .detail-body {
+            margin-top: .35rem;
+            padding-top: .35rem;
+            border-top: 1px dashed var(--border);
+        }
+
+        .todo-detail .detail-body code {
+            font-family: var(--mono);
+            font-size: .92em;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0 .25rem;
+        }
+
+        .todo-detail .detail-body a {
+            color: var(--link);
+        }
+
+        .foot {
+            flex-shrink: 0;
+            padding: .4rem .6rem .55rem;
+            border-top: 1px solid var(--border);
+            font-size: .78em;
+            color: var(--muted);
+            line-height: 1.45;
+            background: var(--panel);
+        }
+
+        .empty {
+            margin: 1.25rem .5rem;
+            padding: 1.25rem 1rem;
+            text-align: center;
+            border: 1px dashed var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+            color: var(--muted);
+        }
+
+        .empty strong {
+            display: block;
+            color: var(--ink);
+            font-size: 1.05em;
+            margin-bottom: .35rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .task-card.expanded {
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        }
+
+        .task-expand-panel {
+            margin: .45rem 0 0 2.65rem;
+            padding: .55rem .55rem .6rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--panel) 96%, var(--hover));
+        }
+
+        .field-grid {
+            display: grid;
+            gap: .4rem;
+        }
+
+        .field-grid label {
+            display: grid;
+            gap: .2rem;
+            font-size: .72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: var(--muted);
+        }
+
+        .field-grid input,
+        .field-grid select,
+        .field-grid textarea {
+            font: inherit;
+            font-size: .92em;
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: normal;
+            color: var(--ink);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: .32rem .4rem;
+            background: var(--panel);
+            width: 100%;
+        }
+
+        .field-grid textarea {
+            min-height: 4.5rem;
+            resize: vertical;
+            font-family: var(--mono);
+            font-size: .86em;
+            line-height: 1.45;
+        }
+
+        .expand-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+            margin-top: .5rem;
+            align-items: center;
+        }
+
+        .expand-actions button {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            border-radius: 6px;
+            padding: .3rem .55rem;
+            font-size: .88em;
+            cursor: pointer;
+            color: var(--ink);
+        }
+
+        .expand-actions button.primary {
+            border-color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+            color: var(--ink);
+            font-weight: 650;
+        }
+
+        .expand-readonly {
+            margin-top: .35rem;
+            font-size: .82em;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+
+        .expand-readonly a {
+            color: var(--link);
+            cursor: pointer;
+        }
+
+        .todo-title {
+            cursor: pointer;
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(0, 0, 0, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .modal-card {
+            width: min(22rem, 100%);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--panel);
+            padding: 1rem .95rem .85rem;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-card h3 {
+            margin: 0 0 .35rem;
+            font-size: 1.05rem;
+        }
+
+        .modal-card p {
+            margin: 0 0 .75rem;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: .4rem;
+            justify-content: flex-end;
+        }
+
+        .modal-actions button {
+            border: 1px solid var(--border);
+            background: var(--bg);
+            border-radius: 6px;
+            padding: .35rem .65rem;
+            cursor: pointer;
+            font-size: .9em;
+        }
+
+        .modal-actions button.primary {
+            border-color: var(--accent);
+            font-weight: 650;
+        }
+
+        .modal-actions button.danger {
+            color: var(--status-blocked-fg);
+            border-color: color-mix(in srgb, var(--status-blocked-fg) 45%, var(--border));
+        }
+    </style>
+</head>
+
+<body>
+    <header class="top">
+        <div class="stats" id="statsBlock">
+            <div class="stats-copy">
+                <p class="stats-title">Open work</p>
+                <p class="stats-open" id="openCount">—</p>
+                <p class="stats-sub" id="statsSub">—</p>
+                <div class="stats-bar" aria-hidden="true">
+                    <div class="stats-bar-fill" id="statsBarFill"></div>
+                </div>
+            </div>
+        </div>
+        <div class="repo-summary" id="repoSummary"></div>
+        <div class="toolbar">
+            <div class="seg" role="tablist" aria-label="Filter tasks">
+                <button type="button" class="active" data-filter="open" role="tab">Open</button>
+                <button type="button" data-filter="all" role="tab">All</button>
+                <button type="button" data-filter="done" role="tab">Done</button>
+            </div>
+            <div class="toolbar-actions">
+                <button type="button" class="ghost" id="groupToggle" title="Group: List" aria-label="Change list grouping">⫶</button>
+                <button type="button" class="ghost" id="dbBtn" title="Open database" aria-label="Open database">Db</button>
+                <button type="button" class="ghost" id="reloadBtn" title="Refresh scan" aria-label="Refresh">↻</button>
+                <button type="button" class="ghost" id="popOutBtn" title="Pop out panel" aria-label="Pop out">⤢</button>
+            </div>
+        </div>
+        <div class="filter-pills" role="tablist" aria-label="View filters" id="filterPills"></div>
+        <div class="task-search">
+            <input type="search" id="taskSearch" placeholder="Filter tasks…" aria-label="Filter tasks" autocomplete="off" />
+            <button type="button" class="ghost task-search-clear hidden" id="taskSearchClear" aria-label="Clear filter">×</button>
+        </div>
+        <form class="quick-add" id="quickAddForm" autocomplete="off">
+            <input type="text" id="quickAddTitle" placeholder="Add a task…" aria-label="Title" />
+            <select id="quickAddStatus" aria-label="Status">
+                <option value="in progress">In progress</option>
+                <option value="review">Review</option>
+                <option value="blocked">Blocked</option>
+                <option value="ready to merge">Ready</option>
+                <option value="paused">Paused</option>
+            </select>
+            <button type="submit" class="primary">Add</button>
+        </form>
+    </header>
+    <main class="main" id="main">
+        <div class="empty hidden" id="emptyHint">
+            <strong>Start tracking work</strong>
+            <span>Type a title above to add your first task, or scan GitHub to import open PRs.</span>
+            <div class="empty-actions">
+                <button type="button" class="primary" id="emptyReconcileBtn">Import from GitHub</button>
+                <button type="button" id="emptyDbBtn">Open database</button>
+            </div>
+        </div>
+        <div id="sectionsRoot"></div>
+    </main>
+    <footer class="foot" id="foot">
+        <div id="footMeta"></div>
+    </footer>
+    <div class="modal-backdrop hidden" id="doneModal" role="dialog" aria-modal="true" aria-labelledby="doneModalTitle">
+        <div class="modal-card">
+            <h3 id="doneModalTitle">Marked done</h3>
+            <p id="doneModalBody"></p>
+            <div class="modal-actions stack">
+                <button type="button" class="primary" id="doneArchiveBtn">Archive</button>
+                <button type="button" id="doneSessionBtn">Hide until refresh</button>
+                <button type="button" class="danger" id="doneRemoveBtn">Delete permanently</button>
+                <button type="button" id="doneUndoBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        const vscode = acquireVsCodeApi();
+        const savedUi = vscode.getState() || {};
+        let filter = savedUi.filter || "open";
+        let groupMode = savedUi.groupMode || "list";
+        let pillFilter = savedUi.pillFilter || "allOpen";
+        let expandedId = savedUi.expandedId || null;
+        let workspaceOnly = savedUi.workspaceOnly || false;
+        let boot = { activeTasks: { todos: [] }, generatedAt: "", discovery: {} };
+        let draggedId = null;
+        let doneModalTodoId = null;
+        let doneModalTrap = null;
+        let searchText = "";
+        let kbdFocusId = savedUi.kbdFocusId || null;
+        let awaitingPayload = !savedUi.hasRendered;
+        let renderScheduled = false;
+        let searchDebounce = null;
+        const RECONCILE_CARD_CAP = 15;
+
+        function scheduleRender() {
+            if (renderScheduled) {
+                return;
+            }
+            renderScheduled = true;
+            requestAnimationFrame(() => {
+                renderScheduled = false;
+                renderNow();
+            });
+        }
+
+        const GROUP_ORDER = ["list", "repo", "status"];
+        const GROUP_LABEL = { list: "List", repo: "Repo", status: "Status" };
+
+        function updateGroupToggleUi() {
+            const btn = document.getElementById("groupToggle");
+            if (!btn) return;
+            const label = GROUP_LABEL[groupMode] || groupMode;
+            btn.title = "Group: " + label + " (click to change)";
+            btn.setAttribute("aria-label", "Grouping: " + label);
+        }
+
+        function cycleGroupMode() {
+            const idx = GROUP_ORDER.indexOf(groupMode);
+            const next = GROUP_ORDER[(idx + 1) % GROUP_ORDER.length];
+            setGroup(next);
+        }
+
+        function todoMatchesWorkspace(todo) {
+            if (!workspaceOnly) return true;
+            const ctx = (boot.discovery && boot.discovery.workspace) || {};
+            if (!ctx.repoKey && !ctx.branch && !ctx.folder) return true;
+            if (ctx.repoKey && todo.repo === ctx.repoKey) {
+                if (!ctx.branch || !todo.branch) return true;
+                return todo.branch === ctx.branch;
+            }
+            if (ctx.folder && todo.worktree) {
+                return ctx.folder.indexOf(todo.worktree.replace(/^\.\.\//, "")) >= 0;
+            }
+            return false;
+        }
+
+        function ciBadgeForTodo(todo) {
+            const map = boot.discovery && boot.discovery.prStatusByTodoId;
+            const ci = map ? map[todo.id] : null;
+            if (!ci) return null;
+            const el = document.createElement("span");
+            const roll = (ci.rollup || "unknown").toLowerCase();
+            el.className = "ci-pill " + (roll === "success" || roll === "failure" || roll === "pending" ? roll : "");
+            el.textContent = "CI " + (ci.rollup || "?");
+            if (ci.reviewDecision) el.textContent += " · " + ci.reviewDecision;
+            el.title = (ci.checks || []).map((c) => c.name + ": " + (c.conclusion || c.status)).join("\n");
+            return el;
+        }
+
+        function discActionBtn(label, onClick) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.textContent = label;
+            b.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                onClick();
+            });
+            return b;
+        }
+
+        function attachSelectForPr(pr, card) {
+            const todos = (boot.activeTasks.todos || []).filter((t) => !t.done);
+            const row = document.createElement("div");
+            row.className = "disc-actions";
+            row.appendChild(discActionBtn("Add row", () => {
+                vscode.postMessage({ type: "reconcileAddPr", pr });
+            }));
+            if (!todos.length) {
+                card.appendChild(row);
+                return;
+            }
+            const sel = document.createElement("select");
+            todos.forEach((t) => {
+                const o = document.createElement("option");
+                o.value = t.id;
+                o.textContent = t.title || t.label || "Task";
+                sel.appendChild(o);
+            });
+            row.appendChild(sel);
+            row.appendChild(discActionBtn("Attach", () => {
+                vscode.postMessage({ type: "reconcileAttachPr", workId: sel.value, pr });
+            }));
+            row.appendChild(discActionBtn("Dismiss", () => {
+                vscode.postMessage({ type: "reconcileDismiss", kind: "pr", refKey: pr.url });
+            }));
+            card.appendChild(row);
+        }
+
+        const shortAt = (s) => {
+            if (!s) return "";
+            const d = new Date(s);
+            if (Number.isNaN(d.getTime())) return String(s).slice(5, 16);
+            const mm = String(d.getMonth() + 1).padStart(2, "0");
+            const dd = String(d.getDate()).padStart(2, "0");
+            const hh = String(d.getHours()).padStart(2, "0");
+            const mi = String(d.getMinutes()).padStart(2, "0");
+            return mm + "-" + dd + " " + hh + ":" + mi;
+        };
+
+        const relativeScanAge = (iso) => {
+            if (!iso) return "";
+            const then = new Date(iso).getTime();
+            if (Number.isNaN(then)) return "";
+            const mins = Math.round((Date.now() - then) / 60000);
+            if (mins < 1) return "just now";
+            if (mins < 60) return mins + " min ago";
+            const hrs = Math.round(mins / 60);
+            if (hrs < 48) return hrs + " hr ago";
+            return Math.round(hrs / 24) + " d ago";
+        };
+
+        const scanIsStale = (iso) => {
+            if (!iso) return false;
+            const then = new Date(iso).getTime();
+            return !Number.isNaN(then) && Date.now() - then > 60 * 60 * 1000;
+        };
+
+        const REPO_VIS = {
+            instawork: { key: "instawork", name: "Instawork", icon: "⬡", short: "IW", accent: "#2563eb" },
+            finch: { key: "finch", name: "Finch", icon: "◆", short: "F", accent: "#0d9488" },
+            infrastructure: { key: "infrastructure", name: "Infrastructure", icon: "▣", short: "IF", accent: "#7c3aed" },
+        };
+        const REPO_ORDER = ["instawork", "finch", "infrastructure"];
+
+        const STATUS_BUCKETS = [
+            { tone: "blocked", label: "Blocked" },
+            { tone: "review", label: "In review" },
+            { tone: "progress", label: "In progress" },
+            { tone: "ready", label: "Ready / merge" },
+            { tone: "paused", label: "Paused" },
+            { tone: "default", label: "Other" },
+        ];
+
+        const GITHUB_REPO = {
+            instawork: "Instawork/instawork",
+            finch: "Instawork/finch",
+            infrastructure: "Instawork/infrastructure",
+        };
+
+        function repoKey(repo) {
+            const k = String(repo || "").trim().toLowerCase();
+            return REPO_VIS[k] ? k : k ? "unknown" : "";
+        }
+
+        function githubPrUrl(rk, prNumber) {
+            const slug = GITHUB_REPO[String(rk || "").toLowerCase()];
+            if (!slug || !prNumber) return null;
+            return "https://github.com/" + slug + "/pull/" + prNumber;
+        }
+
+        function statusTone(status) {
+            const s = String(status || "").toLowerCase();
+            if (/block|fail|red|tach/.test(s)) return "blocked";
+            if (/review|duncan|waiting/.test(s)) return "review";
+            if (/progress|step|walkthrough|active branch/.test(s)) return "progress";
+            if (/ready|green|merge|ci green|pushed/.test(s)) return "ready";
+            if (/pause|paused/.test(s)) return "paused";
+            return "default";
+        }
+
+        function urgencyClassForTodo(todo) {
+            if (todo.done) return "muted";
+            const tone = statusTone(todo.status);
+            if (tone === "blocked") return "high";
+            if (tone === "review" || tone === "progress") return "medium";
+            if (tone === "ready") return "low";
+            return "muted";
+        }
+
+        function prCountForTodo(todo) {
+            let n = 0;
+            if (todo.pr_number || todo.pr_url) n += 1;
+            n += (todo.prs || []).length;
+            return n;
+        }
+
+        function todoHasPr(todo) {
+            return prCountForTodo(todo) > 0;
+        }
+
+        function todoMatchesSearch(todo, q) {
+            if (!q) return true;
+            const hay = [
+                todo.title,
+                todo.label,
+                todo.status,
+                todo.repo,
+                todo.branch,
+                todo.notes,
+                todo.worktree,
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase();
+            return hay.includes(q);
+        }
+
+        function activeViewFilterLabel() {
+            if (searchText.trim()) {
+                return "Search";
+            }
+            if (workspaceOnly) {
+                return "This workspace";
+            }
+            const def = PILL_DEFS.find((p) => p.id === pillFilter);
+            if (def && pillFilter !== "allOpen") {
+                return def.label;
+            }
+            return null;
+        }
+
+        function renderFilteredEmpty(root, label) {
+            const hint = document.createElement("div");
+            hint.className = "empty";
+            const strong = document.createElement("strong");
+            strong.textContent = "No matches";
+            hint.appendChild(strong);
+            hint.appendChild(document.createTextNode(" for " + label + "."));
+            const actions = document.createElement("div");
+            actions.className = "empty-actions";
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "primary";
+            btn.textContent = "Clear filters";
+            btn.addEventListener("click", () => {
+                searchText = "";
+                document.getElementById("taskSearch").value = "";
+                document.getElementById("taskSearchClear").classList.add("hidden");
+                workspaceOnly = false;
+                pillFilter = "allOpen";
+                saveUiState();
+                scheduleRender();
+            });
+            actions.appendChild(btn);
+            hint.appendChild(actions);
+            root.appendChild(hint);
+        }
+
+        function reconcileItemCount() {
+            const disc = boot.discovery || {};
+            const untracked = new Set((disc.untrackedCloudAgents || []).map((a) => a.agentId));
+            return (disc.missingPrs || []).length + untracked.size + (disc.staleTrackedPrs || []).length;
+        }
+
+        function applyPillFilter(todos) {
+            if (pillFilter === "hasPr") {
+                return todos.filter((t) => todoHasPr(t));
+            }
+            if (pillFilter === "needsReconcile") {
+                const staleIds = new Set((boot.discovery?.staleTrackedPrs || []).map((r) => r.todoId));
+                return todos.filter((t) => staleIds.has(t.id));
+            }
+            return todos;
+        }
+
+        const PILL_DEFS = [
+            { id: "allOpen", label: "All open" },
+            { id: "hasPr", label: "Has PR" },
+            { id: "needsReconcile", label: "Needs reconcile" },
+            { id: "workspace", label: "This workspace" },
+        ];
+
+        function renderFilterPills(openTodos) {
+            const root = document.getElementById("filterPills");
+            root.replaceChildren();
+            const rec = reconcileItemCount();
+            const wsOpen = (boot.activeTasks.todos || []).filter((t) => !t.done && todoMatchesWorkspace(t)).length;
+            PILL_DEFS.forEach((def) => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "pill";
+                btn.dataset.pill = def.id;
+                btn.setAttribute("role", "tab");
+                const active =
+                    def.id === "workspace" ? workspaceOnly : pillFilter === def.id && def.id !== "workspace";
+                if (active) btn.classList.add("active");
+                btn.setAttribute("aria-selected", active ? "true" : "false");
+                btn.appendChild(document.createTextNode(def.label));
+                let count = null;
+                if (def.id === "allOpen") count = openTodos.length;
+                else if (def.id === "hasPr") count = openTodos.filter((t) => todoHasPr(t)).length;
+                else if (def.id === "needsReconcile") count = rec;
+                else if (def.id === "workspace") count = wsOpen;
+                if (count != null) {
+                    const c = document.createElement("span");
+                    c.className = "pill-count";
+                    c.textContent = String(count);
+                    btn.appendChild(c);
+                }
+                btn.addEventListener("click", () => setPillFilter(def.id));
+                root.appendChild(btn);
+            });
+        }
+
+        function setPillFilter(id) {
+            if (id === "workspace") {
+                workspaceOnly = !workspaceOnly;
+            } else {
+                pillFilter = id;
+            }
+            saveUiState();
+            scheduleRender();
+        }
+
+        function cardAccentFor(todo) {
+            if (todo.done) return "var(--border)";
+            const key = repoKey(todo.repo);
+            if (key && REPO_VIS[key]) return REPO_VIS[key].accent;
+            const map = {
+                blocked: "var(--status-blocked-fg)",
+                review: "var(--status-review-fg)",
+                progress: "var(--status-progress-fg)",
+                ready: "var(--status-ready-fg)",
+                paused: "var(--muted)",
+                default: "var(--accent)",
+            };
+            return map[statusTone(todo.status)] || map.default;
+        }
+
+        function primaryHref(todo) {
+            if (todo.pr_url) return todo.pr_url;
+            if (todo.pr_number && todo.repo) {
+                const u = githubPrUrl(todo.repo, todo.pr_number);
+                if (u) return u;
+            }
+            if (todo.links && todo.links.length) return todo.links[0].url;
+            return null;
+        }
+
+        function saveUiState(extra) {
+            vscode.setState({
+                ...(vscode.getState() || {}),
+                filter,
+                groupMode,
+                pillFilter,
+                expandedId,
+                workspaceOnly,
+                ...extra,
+            });
+        }
+
+        function openExternalUrl(url, ev) {
+            if (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+            }
+            if (url) vscode.postMessage({ type: "openUrl", url });
+        }
+
+        function wireExternalAnchor(a) {
+            const href = a.getAttribute("href");
+            if (!href || !/^https?:/i.test(href)) return;
+            a.addEventListener("click", (ev) => openExternalUrl(href, ev));
+        }
+
+        function renderInlineMd(container, text) {
+            const tokenRe = /\[([^\]]+)\]\((https?:[^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*/g;
+            let last = 0;
+            let m;
+            while ((m = tokenRe.exec(text))) {
+                if (m.index > last) {
+                    container.appendChild(document.createTextNode(text.slice(last, m.index)));
+                }
+                if (m[2]) {
+                    const a = document.createElement("a");
+                    a.href = m[2];
+                    a.textContent = m[1];
+                    wireExternalAnchor(a);
+                    container.appendChild(a);
+                } else if (m[3]) {
+                    const c = document.createElement("code");
+                    c.textContent = m[3];
+                    container.appendChild(c);
+                } else if (m[4]) {
+                    const st = document.createElement("strong");
+                    st.textContent = m[4];
+                    container.appendChild(st);
+                }
+                last = tokenRe.lastIndex;
+            }
+            if (last < text.length) {
+                container.appendChild(document.createTextNode(text.slice(last)));
+            }
+        }
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand("copy"); } catch (e) { /* noop */ }
+            document.body.removeChild(ta);
+        }
+
+        function chip(cls, text) {
+            const el = document.createElement("span");
+            el.className = "todo-chip " + cls;
+            if (text != null) el.textContent = text;
+            return el;
+        }
+
+        function buildMeta(todo) {
+            const meta = document.createElement("div");
+            meta.className = "todo-meta";
+            const rk = repoKey(todo.repo);
+
+            if (todo.repo) {
+                meta.appendChild(chip("repo repo-" + rk, todo.repo));
+            }
+            if (todo.pr_number) {
+                const c = chip("pr repo-" + rk);
+                const url = todo.pr_url || githubPrUrl(todo.repo, todo.pr_number);
+                if (url) {
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.textContent = "#" + todo.pr_number;
+                    a.title = "Open PR #" + todo.pr_number;
+                    wireExternalAnchor(a);
+                    c.appendChild(a);
+                } else {
+                    c.textContent = "#" + todo.pr_number;
+                }
+                meta.appendChild(c);
+            }
+            (todo.prs || []).forEach((pr) => {
+                const prk = repoKey(pr.repo);
+                const c = chip("pr" + (prk ? " repo-" + prk : ""));
+                const a = document.createElement("a");
+                a.href = pr.url;
+                a.textContent = (pr.repo ? REPO_VIS[prk] ? REPO_VIS[prk].short + " " : pr.repo + " " : "") + "#" + pr.number;
+                a.title = "Open PR #" + pr.number;
+                wireExternalAnchor(a);
+                c.appendChild(a);
+                meta.appendChild(c);
+            });
+            if (todo.branch) {
+                const c = chip("branch", todo.branch);
+                c.title = "Click to copy branch";
+                c.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    copyToClipboard(todo.branch);
+                    const prev = c.textContent;
+                    c.classList.add("copied");
+                    c.textContent = "✓ copied";
+                    setTimeout(() => { c.classList.remove("copied"); c.textContent = prev; }, 1100);
+                });
+                meta.appendChild(c);
+            }
+            if (todo.worktree) {
+                const c = chip("worktree", "wt: " + todo.worktree);
+                c.title = "Click to copy worktree path";
+                c.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    copyToClipboard(todo.worktree);
+                    const prev = c.textContent;
+                    c.classList.add("copied");
+                    c.textContent = "✓ copied";
+                    setTimeout(() => { c.classList.remove("copied"); c.textContent = prev; }, 1100);
+                });
+                meta.appendChild(c);
+            }
+            (todo.links || []).forEach((link) => {
+                const c = chip("link");
+                const a = document.createElement("a");
+                a.href = link.url;
+                a.textContent = link.label;
+                a.title = link.url;
+                wireExternalAnchor(a);
+                c.appendChild(a);
+                meta.appendChild(c);
+            });
+            if (meta.childNodes.length > 2) {
+                const chips = [...meta.children];
+                const overflow = document.createElement("span");
+                overflow.className = "meta-overflow hidden";
+                chips.slice(2).forEach((node) => overflow.appendChild(node));
+                meta.replaceChildren(...chips.slice(0, 2), overflow);
+                const extra = chips.length - 2;
+                const more = chip("meta-more", "+" + extra);
+                more.title = "Show " + extra + " more fields";
+                more.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    overflow.classList.toggle("hidden");
+                    more.classList.toggle("open");
+                });
+                meta.appendChild(more);
+            }
+            return meta.childNodes.length ? meta : null;
+        }
+
+        function toggleExpanded(todoId) {
+            expandedId = expandedId === todoId ? null : todoId;
+            saveUiState();
+            scheduleRender();
+        }
+
+        function fieldInput(label, value, opts) {
+            const wrap = document.createElement("label");
+            wrap.textContent = label;
+            let control;
+            if (opts && opts.type === "textarea") {
+                control = document.createElement("textarea");
+                control.value = value || "";
+            } else if (opts && opts.type === "select") {
+                control = document.createElement("select");
+                (opts.options || []).forEach(([val, text]) => {
+                    const o = document.createElement("option");
+                    o.value = val;
+                    o.textContent = text;
+                    if (val === (value || "")) o.selected = true;
+                    control.appendChild(o);
+                });
+            } else if (opts && opts.type === "number") {
+                control = document.createElement("input");
+                control.type = "number";
+                control.value = value != null && value !== "" ? String(value) : "";
+            } else {
+                control = document.createElement("input");
+                control.type = "text";
+                control.value = value || "";
+            }
+            control.dataset.field = opts.field;
+            wrap.appendChild(control);
+            return wrap;
+        }
+
+        function buildExpandPanel(todo) {
+            const panel = document.createElement("div");
+            panel.className = "task-expand-panel";
+            const grid = document.createElement("div");
+            grid.className = "field-grid";
+            grid.appendChild(fieldInput("Title", todo.title || todo.label, { field: "title" }));
+            grid.appendChild(fieldInput("Status", todo.status, { field: "status" }));
+            grid.appendChild(fieldInput("Repo", todo.repo, {
+                field: "repo",
+                type: "select",
+                options: [
+                    ["", "—"],
+                    ["instawork", "instawork"],
+                    ["finch", "finch"],
+                    ["infrastructure", "infrastructure"],
+                ],
+            }));
+            grid.appendChild(fieldInput("Branch", todo.branch, { field: "branch" }));
+            grid.appendChild(fieldInput("Worktree", todo.worktree, { field: "worktree" }));
+            grid.appendChild(fieldInput("PR number", todo.pr_number, { field: "pr_number", type: "number" }));
+            grid.appendChild(fieldInput("PR URL", todo.pr_url, { field: "pr_url" }));
+            grid.appendChild(fieldInput("Notes", todo.notes, { field: "notes", type: "textarea" }));
+            panel.appendChild(grid);
+
+            const extra = document.createElement("div");
+            extra.className = "expand-readonly";
+            const bits = [];
+            (todo.prs || []).forEach((pr) => {
+                bits.push("PR " + (pr.repo ? pr.repo + " " : "") + "#" + pr.number);
+            });
+            (todo.links || []).forEach((link) => {
+                bits.push(link.label);
+            });
+            if (bits.length) {
+                extra.textContent = "Also linked: " + bits.join(" · ");
+            }
+            if (extra.textContent) panel.appendChild(extra);
+
+            const actions = document.createElement("div");
+            actions.className = "expand-actions";
+            const saveBtn = document.createElement("button");
+            saveBtn.type = "button";
+            saveBtn.className = "primary";
+            saveBtn.textContent = "Save to database";
+            saveBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                const fields = {};
+                grid.querySelectorAll("[data-field]").forEach((el) => {
+                    const key = el.dataset.field;
+                    if (!key) return;
+                    if (key === "pr_number") {
+                        const raw = el.value.trim();
+                        fields.pr_number = raw ? parseInt(raw, 10) : null;
+                        return;
+                    }
+                    fields[key] = el.value;
+                });
+                vscode.postMessage({ type: "updateTodo", id: todo.id, fields });
+                const card = document.querySelector(
+                    '.task-card[data-id="' + CSS.escape(todo.id) + '"]'
+                );
+                if (card) {
+                    card.classList.add("saved");
+                    setTimeout(() => card.classList.remove("saved"), 900);
+                }
+            });
+            const collapseBtn = document.createElement("button");
+            collapseBtn.type = "button";
+            collapseBtn.textContent = "Collapse";
+            collapseBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                expandedId = null;
+                saveUiState();
+                scheduleRender();
+            });
+            if (todo.worktree) {
+                const wtBtn = document.createElement("button");
+                wtBtn.type = "button";
+                wtBtn.textContent = "Open worktree";
+                wtBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    vscode.postMessage({ type: "openWorktree", path: todo.worktree });
+                });
+                actions.appendChild(wtBtn);
+            }
+            const dbBtn = document.createElement("button");
+            dbBtn.type = "button";
+            dbBtn.textContent = "Open DB";
+            dbBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                vscode.postMessage({ type: "openDatabase" });
+            });
+            actions.appendChild(dbBtn);
+            const href = primaryHref(todo);
+            if (href) {
+                const openBtn = document.createElement("button");
+                openBtn.type = "button";
+                openBtn.textContent = "Open PR";
+                openBtn.addEventListener("click", (ev) => openExternalUrl(href, ev));
+                actions.appendChild(openBtn);
+            }
+            actions.appendChild(saveBtn);
+            actions.appendChild(collapseBtn);
+            panel.appendChild(actions);
+            panel.addEventListener("click", (ev) => ev.stopPropagation());
+            return panel;
+        }
+
+        function showDoneModal(todo) {
+            doneModalTodoId = todo.id;
+            document.getElementById("doneModalBody").textContent =
+                "How should we close \"" + (todo.title || todo.label || "Task") + "\"?";
+            const modal = document.getElementById("doneModal");
+            modal.classList.remove("hidden");
+            const focusables = modal.querySelectorAll("button");
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            if (first) first.focus();
+            if (doneModalTrap) {
+                document.removeEventListener("keydown", doneModalTrap);
+            }
+            doneModalTrap = (ev) => {
+                if (ev.key !== "Tab" || !doneModalTodoId) return;
+                if (ev.shiftKey && document.activeElement === first) {
+                    ev.preventDefault();
+                    last.focus();
+                } else if (!ev.shiftKey && document.activeElement === last) {
+                    ev.preventDefault();
+                    first.focus();
+                }
+            };
+            document.addEventListener("keydown", doneModalTrap);
+        }
+
+        function hideDoneModal() {
+            doneModalTodoId = null;
+            document.getElementById("doneModal").classList.add("hidden");
+            if (doneModalTrap) {
+                document.removeEventListener("keydown", doneModalTrap);
+                doneModalTrap = null;
+            }
+        }
+
+        function buildTaskCard(todo) {
+            const rk = repoKey(todo.repo);
+            const card = document.createElement("article");
+            card.className = "task-card" + (todo.done ? " done" : "") + (rk ? " repo-" + rk : "");
+            if (expandedId === todo.id) card.classList.add("expanded");
+            card.dataset.id = todo.id;
+            card.dataset.group = groupMode === "repo" ? (rk || "unknown") : groupMode === "status" ? statusTone(todo.status) : "list";
+            card.style.setProperty("--card-accent", cardAccentFor(todo));
+            card.tabIndex = kbdFocusId === todo.id ? 0 : -1;
+
+            const head = document.createElement("div");
+            head.className = "task-card-head";
+
+            const handle = document.createElement("div");
+            handle.className = "drag-handle";
+            handle.textContent = "⠿";
+            handle.title = "Drag to reorder";
+            handle.setAttribute("role", "button");
+            handle.setAttribute("aria-label", "Drag to reorder " + (todo.title || todo.label || "task"));
+            handle.classList.toggle("hidden", groupMode !== "list");
+            handle.addEventListener("mousedown", () => { card.draggable = true; });
+            wireDrag(card, handle);
+
+            const checkWrap = document.createElement("label");
+            checkWrap.className = "check";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = Boolean(todo.done);
+            cb.id = "todo-" + todo.id;
+            cb.setAttribute("aria-label", "Mark done: " + (todo.title || todo.label));
+            const box = document.createElement("span");
+            box.className = "check-box";
+            cb.addEventListener("change", () => {
+                if (cb.checked) {
+                    cb.checked = false;
+                    showDoneModal(todo);
+                } else {
+                    vscode.postMessage({ type: "toggleTodo", id: todo.id, done: false });
+                }
+            });
+            checkWrap.addEventListener("click", (ev) => ev.stopPropagation());
+            checkWrap.appendChild(cb);
+            checkWrap.appendChild(box);
+
+            const badge = document.createElement("div");
+            badge.className = "repo-badge" + (rk ? " repo-" + rk : " repo-unknown");
+            if (REPO_VIS[rk]) {
+                badge.textContent = REPO_VIS[rk].icon;
+                badge.title = REPO_VIS[rk].name;
+            } else if (todo.repo) {
+                badge.textContent = String(todo.repo).slice(0, 2).toUpperCase();
+                badge.title = todo.repo;
+            } else {
+                badge.textContent = "?";
+                badge.title = "No repo";
+            }
+
+            const body = document.createElement("div");
+            body.className = "task-card-body";
+
+            const titleRow = document.createElement("div");
+            titleRow.className = "title-row";
+
+            if (!todo.done && todo.status) {
+                const tone = statusTone(todo.status);
+                const eyebrow = document.createElement("span");
+                eyebrow.className = "status-eyebrow tone-" + tone;
+                eyebrow.textContent = todo.status;
+                body.appendChild(eyebrow);
+            }
+
+            const titleEl = document.createElement("div");
+            titleEl.className = "todo-title";
+            titleEl.textContent = todo.title || todo.label || "Untitled";
+            titleEl.title = "Click to expand details";
+            titleRow.appendChild(titleEl);
+
+            const prN = prCountForTodo(todo);
+            if (prN > 0) {
+                const prBadge = document.createElement("span");
+                prBadge.className = "pr-count-badge has-pr";
+                prBadge.title = prN === 1 ? "1 linked PR" : prN + " linked PRs";
+                prBadge.textContent = prN === 1 ? "PR" : "PR " + prN;
+                titleRow.appendChild(prBadge);
+            }
+
+            body.appendChild(titleRow);
+
+            const meta = buildMeta(todo);
+            if (meta) body.appendChild(meta);
+            const ci = ciBadgeForTodo(todo);
+            if (ci) {
+                const ciWrap = document.createElement("div");
+                ciWrap.style.marginTop = ".25rem";
+                ciWrap.appendChild(ci);
+                body.appendChild(ciWrap);
+            }
+
+            head.appendChild(handle);
+            head.appendChild(checkWrap);
+            head.appendChild(badge);
+            head.appendChild(body);
+            card.appendChild(head);
+
+            if (expandedId === todo.id) {
+                card.appendChild(buildExpandPanel(todo));
+            }
+
+            card.addEventListener("click", (ev) => {
+                if (ev.target.closest("a, button, input, textarea, select, label.check, .drag-handle, .task-expand-panel")) {
+                    return;
+                }
+                toggleExpanded(todo.id);
+            });
+            if (kbdFocusId === todo.id) {
+                card.classList.add("kbd-focus");
+            }
+            return card;
+        }
+
+        function visibleTaskCards() {
+            return [...document.querySelectorAll("#sectionsRoot .task-card")];
+        }
+
+        function setKbdFocus(id) {
+            if (kbdFocusId === id) {
+                return;
+            }
+            kbdFocusId = id;
+            document.querySelectorAll(".task-card.kbd-focus").forEach((el) => {
+                el.classList.remove("kbd-focus");
+            });
+            if (!id) return;
+            const card = document.querySelector(
+                '.task-card[data-id="' + CSS.escape(id) + '"]'
+            );
+            if (card) {
+                card.classList.add("kbd-focus");
+            }
+            saveUiState({ kbdFocusId: id });
+        }
+
+        function cardTodoById(id) {
+            return (boot.activeTasks.todos || []).find((t) => t.id === id);
+        }
+
+        function triggerDoneForTodo(todo) {
+            if (!todo || todo.done) return;
+            showDoneModal(todo);
+        }
+
+        function wireDrag(card, handle) {
+            card.addEventListener("dragstart", (ev) => {
+                draggedId = card.dataset.id;
+                card.classList.add("dragging");
+                ev.dataTransfer.effectAllowed = "move";
+                try { ev.dataTransfer.setData("text/plain", draggedId); } catch (e) { /* noop */ }
+            });
+            card.addEventListener("dragend", () => {
+                draggedId = null;
+                card.draggable = false;
+                card.classList.remove("dragging");
+                clearIndicators();
+            });
+            card.addEventListener("dragover", (ev) => {
+                if (!draggedId || card.dataset.id === draggedId) return;
+                if (card.dataset.group !== draggedGroup()) return;
+                ev.preventDefault();
+                ev.dataTransfer.dropEffect = "move";
+                const rect = card.getBoundingClientRect();
+                const after = ev.clientY > rect.top + rect.height / 2;
+                clearIndicators();
+                card.classList.add(after ? "drop-after" : "drop-before");
+            });
+            card.addEventListener("dragleave", () => {
+                card.classList.remove("drop-before", "drop-after");
+            });
+            card.addEventListener("drop", (ev) => {
+                if (!draggedId || card.dataset.id === draggedId) return;
+                if (card.dataset.group !== draggedGroup()) return;
+                ev.preventDefault();
+                const rect = card.getBoundingClientRect();
+                const after = ev.clientY > rect.top + rect.height / 2;
+                applyReorder(draggedId, card.dataset.id, after);
+                clearIndicators();
+            });
+        }
+
+        function draggedGroup() {
+            const el = document.querySelector(
+                '.task-card[data-id="' + CSS.escape(draggedId) + '"]'
+            );
+            return el ? el.dataset.group : null;
+        }
+
+        function clearIndicators() {
+            document.querySelectorAll(".task-card.drop-before, .task-card.drop-after")
+                .forEach((el) => el.classList.remove("drop-before", "drop-after"));
+        }
+
+        function applyReorder(dragId, targetId, after) {
+            const todos = (boot.activeTasks.todos || []);
+            const ids = todos.map((t) => t.id).filter((id) => id !== dragId);
+            let idx = ids.indexOf(targetId);
+            if (idx < 0) {
+                ids.push(dragId);
+            } else {
+                if (after) idx += 1;
+                ids.splice(idx, 0, dragId);
+            }
+            const byId = new Map(todos.map((t) => [t.id, t]));
+            boot.activeTasks.todos = ids.map((id) => byId.get(id)).filter(Boolean);
+            vscode.postMessage({ type: "reorderTodos", order: ids });
+            scheduleRender();
+        }
+
+        function sectionHead(title, count, dotColor) {
+            const head = document.createElement("div");
+            head.className = "section-head";
+            if (dotColor) {
+                const dot = document.createElement("span");
+                dot.className = "sh-dot";
+                dot.style.background = dotColor;
+                head.appendChild(dot);
+            }
+            const h2 = document.createElement("h2");
+            h2.textContent = title;
+            const c = document.createElement("span");
+            c.className = "section-count";
+            c.textContent = String(count);
+            head.appendChild(h2);
+            head.appendChild(c);
+            return head;
+        }
+
+        function listSection(title, todos, dotColor) {
+            const wrap = document.createElement("section");
+            wrap.className = "section";
+            wrap.appendChild(sectionHead(title, todos.length, dotColor));
+            const list = document.createElement("div");
+            list.className = "task-cards";
+            todos.forEach((t) => list.appendChild(buildTaskCard(t)));
+            wrap.appendChild(list);
+            return wrap;
+        }
+
+        function groupByRepo(root, todos) {
+            const seen = new Set();
+            REPO_ORDER.forEach((key) => {
+                const items = todos.filter((t) => repoKey(t.repo) === key);
+                items.forEach((t) => seen.add(t.id));
+                if (items.length) {
+                    root.appendChild(listSection(REPO_VIS[key].name, items, REPO_VIS[key].accent));
+                }
+            });
+            const rest = todos.filter((t) => !seen.has(t.id));
+            if (rest.length) root.appendChild(listSection("Other", rest, "var(--muted)"));
+        }
+
+        function groupByStatus(root, todos) {
+            STATUS_BUCKETS.forEach((bucket) => {
+                const items = todos.filter((t) => statusTone(t.status) === bucket.tone);
+                if (items.length) {
+                    const dot = {
+                        blocked: "var(--status-blocked-fg)",
+                        review: "var(--status-review-fg)",
+                        progress: "var(--status-progress-fg)",
+                        ready: "var(--status-ready-fg)",
+                        paused: "var(--muted)",
+                        default: "var(--accent)",
+                    }[bucket.tone];
+                    root.appendChild(listSection(bucket.label, items, dot));
+                }
+            });
+        }
+
+        function renderDiscovery(root) {
+            const disc = boot.discovery || {};
+            const missing = disc.missingPrs || [];
+            const stale = disc.staleTrackedPrs || [];
+            const cloud = disc.cloudAgents || [];
+            const untrackedCloud = new Set((disc.untrackedCloudAgents || []).map((a) => a.agentId));
+            const reconcileCount = missing.length + untrackedCloud.size + stale.length;
+            const hasScan = Boolean(disc.scannedAt);
+            if (!hasScan && !reconcileCount && !cloud.length && !disc.githubError && !disc.cloudError) {
+                return;
+            }
+
+            const wrap = document.createElement("section");
+            wrap.className = "section";
+
+            const details = document.createElement("details");
+            details.className = "reconcile-details";
+            details.open = pillFilter === "needsReconcile" || reconcileCount > 0;
+
+            const summary = document.createElement("summary");
+            const summaryParts = ["Reconcile"];
+            if (missing.length) summaryParts.push(missing.length + " inbound");
+            if (stale.length) summaryParts.push(stale.length + " stale");
+            const agentCount = untrackedCloud.size;
+            if (agentCount) summaryParts.push(agentCount + " agent");
+            if (summaryParts.length === 1 && disc.scannedAt) {
+                summaryParts.push("up to date");
+            }
+            summary.textContent = summaryParts.join(" · ");
+            details.appendChild(summary);
+
+            const hint = document.createElement("p");
+            hint.className = "disc-hint";
+            const parts = [];
+            if (reconcileCount === 0 && disc.scannedAt) {
+                const rel = relativeScanAge(disc.scannedAt);
+                hint.textContent = "✓ All PRs and cloud agents tracked · scanned " + rel;
+                if (scanIsStale(disc.scannedAt)) {
+                    hint.classList.add("stale-scan");
+                }
+            } else if (disc.scannedAt) {
+                parts.push("Scanned " + shortAt(disc.scannedAt));
+            }
+            if (disc.githubError) parts.push("GitHub: " + disc.githubError);
+            if (disc.cloudError) parts.push("Cloud: " + disc.cloudError);
+            if (!hint.textContent) {
+                hint.textContent = parts.length
+                    ? parts.join(" · ")
+                    : "Inbound (untracked) and outbound (stale) vs your active work list.";
+            }
+            details.appendChild(hint);
+
+            const cards = document.createElement("div");
+            cards.className = "disc-cards";
+
+            stale.slice(0, RECONCILE_CARD_CAP).forEach((row) => {
+                const card = document.createElement("article");
+                card.className = "disc-card untracked";
+                const title = document.createElement("p");
+                title.className = "disc-title";
+                title.textContent = "Stale: " + row.title + " · PR #" + row.prNumber;
+                card.appendChild(title);
+                const meta = document.createElement("div");
+                meta.className = "disc-meta";
+                const st = document.createElement("span");
+                st.className = "disc-pill";
+                st.textContent = row.state || "not open";
+                meta.appendChild(st);
+                card.appendChild(meta);
+                const actions = document.createElement("div");
+                actions.className = "disc-actions";
+                actions.appendChild(discActionBtn("Remove row", () => {
+                    vscode.postMessage({ type: "reconcileRemoveRow", id: row.todoId });
+                }));
+                actions.appendChild(discActionBtn("Open PR", () => openExternalUrl(row.prUrl)));
+                card.appendChild(actions);
+                cards.appendChild(card);
+            });
+
+            missing.slice(0, RECONCILE_CARD_CAP).forEach((pr) => {
+                const card = document.createElement("article");
+                card.className = "disc-card untracked";
+                const title = document.createElement("p");
+                title.className = "disc-title";
+                const a = document.createElement("a");
+                a.href = "#";
+                a.textContent = "PR #" + pr.number + " " + (pr.title || "");
+                a.addEventListener("click", (ev) => {
+                    ev.preventDefault();
+                    openExternalUrl(pr.url);
+                });
+                title.appendChild(a);
+                card.appendChild(title);
+                const meta = document.createElement("div");
+                meta.className = "disc-meta";
+                if (pr.repoKey && REPO_VIS[pr.repoKey]) {
+                    const pill = document.createElement("span");
+                    pill.className = "disc-pill";
+                    pill.textContent = REPO_VIS[pr.repoKey].short;
+                    meta.appendChild(pill);
+                }
+                const rel = document.createElement("span");
+                rel.className = "disc-pill";
+                rel.textContent = pr.relation === "review_requested" ? "Review requested" : "Authored";
+                meta.appendChild(rel);
+                if (pr.isDraft) {
+                    const d = document.createElement("span");
+                    d.className = "disc-pill";
+                    d.textContent = "Draft";
+                    meta.appendChild(d);
+                }
+                const tag = document.createElement("span");
+                tag.className = "disc-pill";
+                tag.textContent = "Not tracked yet";
+                meta.appendChild(tag);
+                card.appendChild(meta);
+                attachSelectForPr(pr, card);
+                cards.appendChild(card);
+            });
+
+            const cloudVisible = [];
+            cloud.forEach((agent) => {
+                const untracked = untrackedCloud.has(agent.agentId);
+                if (!untracked && agent.runStatus !== "running") {
+                    return;
+                }
+                cloudVisible.push({ agent, untracked });
+            });
+
+            cloudVisible.slice(0, RECONCILE_CARD_CAP).forEach(({ agent, untracked }) => {
+                const card = document.createElement("article");
+                card.className = "disc-card" + (untracked ? " untracked" : "");
+                const title = document.createElement("p");
+                title.className = "disc-title";
+                const a = document.createElement("a");
+                a.href = "#";
+                a.textContent = "☁ " + (agent.name || agent.agentId);
+                a.addEventListener("click", (ev) => {
+                    ev.preventDefault();
+                    openExternalUrl(agent.url);
+                });
+                title.appendChild(a);
+                card.appendChild(title);
+                const meta = document.createElement("div");
+                meta.className = "disc-meta";
+                if (agent.runStatus === "running") {
+                    const run = document.createElement("span");
+                    run.className = "disc-pill running";
+                    run.textContent = "Running";
+                    meta.appendChild(run);
+                } else if (agent.runStatus) {
+                    const st = document.createElement("span");
+                    st.className = "disc-pill";
+                    st.textContent = agent.runStatus;
+                    meta.appendChild(st);
+                }
+                if (agent.branch) {
+                    const br = document.createElement("span");
+                    br.className = "disc-pill";
+                    br.textContent = agent.branch;
+                    meta.appendChild(br);
+                }
+                if (untracked) {
+                    const tag = document.createElement("span");
+                    tag.className = "disc-pill";
+                    tag.textContent = "Not tracked yet";
+                    meta.appendChild(tag);
+                }
+                card.appendChild(meta);
+                if (untracked) {
+                    const actions = document.createElement("div");
+                    actions.className = "disc-actions";
+                    actions.appendChild(discActionBtn("Dismiss", () => {
+                        vscode.postMessage({ type: "reconcileDismiss", kind: "cloud", refKey: agent.agentId });
+                    }));
+                    card.appendChild(actions);
+                }
+                cards.appendChild(card);
+            });
+
+            const hiddenReconcile =
+                Math.max(0, stale.length - RECONCILE_CARD_CAP) +
+                Math.max(0, missing.length - RECONCILE_CARD_CAP) +
+                Math.max(0, cloudVisible.length - RECONCILE_CARD_CAP);
+            if (hiddenReconcile > 0) {
+                const more = document.createElement("p");
+                more.className = "disc-hint";
+                more.textContent =
+                    "+" + hiddenReconcile + " more items — refresh scan or open GitHub to review.";
+                cards.appendChild(more);
+            }
+
+            if (cards.childElementCount) {
+                details.appendChild(cards);
+            }
+            wrap.appendChild(details);
+            root.appendChild(wrap);
+        }
+
+        function renderOpen(root, openTodos) {
+            if (groupMode === "repo") {
+                groupByRepo(root, openTodos);
+            } else if (groupMode === "status") {
+                groupByStatus(root, openTodos);
+            } else {
+                root.appendChild(listSection("Open", openTodos, null));
+            }
+        }
+
+        function renderRepoSummary(openTodos) {
+            const wrap = document.getElementById("repoSummary");
+            wrap.replaceChildren();
+            const counts = {};
+            openTodos.forEach((t) => {
+                const k = repoKey(t.repo) || "unknown";
+                counts[k] = (counts[k] || 0) + 1;
+            });
+            REPO_ORDER.forEach((key) => {
+                if (!counts[key]) return;
+                const chipEl = document.createElement("span");
+                chipEl.className = "rs-chip";
+                const dot = document.createElement("span");
+                dot.className = "dot";
+                dot.style.background = REPO_VIS[key].accent;
+                chipEl.appendChild(dot);
+                chipEl.appendChild(document.createTextNode(REPO_VIS[key].name + " "));
+                const cnt = document.createElement("span");
+                cnt.className = "rs-count";
+                cnt.textContent = String(counts[key]);
+                chipEl.appendChild(cnt);
+                wrap.appendChild(chipEl);
+            });
+        }
+
+        function setFilter(next) {
+            filter = next;
+            saveUiState();
+            document.querySelectorAll('.seg [data-filter]').forEach((btn) => {
+                const on = btn.dataset.filter === filter;
+                btn.classList.toggle("active", on);
+                btn.setAttribute("aria-selected", on ? "true" : "false");
+            });
+            scheduleRender();
+        }
+
+        function setGroup(next) {
+            groupMode = next;
+            saveUiState();
+            updateGroupToggleUi();
+            scheduleRender();
+        }
+
+        function renderFootMeta(parts) {
+            document.getElementById("footMeta").textContent = parts.join(" · ");
+        }
+
+        function renderNow() {
+            const activeTasks = boot.activeTasks || {};
+            let todos = activeTasks.todos || [];
+            const q = searchText.trim().toLowerCase();
+            if (q) {
+                todos = todos.filter((t) => todoMatchesSearch(t, q));
+            }
+            if (workspaceOnly) {
+                todos = todos.filter(todoMatchesWorkspace);
+            }
+            const baseOpenTodos = todos.filter((t) => !t.done);
+            let openTodos = applyPillFilter(baseOpenTodos);
+            const doneTodos = todos.filter((t) => t.done);
+            const doneCount = doneTodos.length;
+            const total = todos.length;
+            const open = openTodos.length;
+            const pct = total ? Math.round((doneCount / total) * 100) : 0;
+
+            const openCountEl = document.getElementById("openCount");
+            if (awaitingPayload && !boot.generatedAt) {
+                openCountEl.textContent = "—";
+                openCountEl.classList.add("loading");
+            } else {
+                awaitingPayload = false;
+                openCountEl.classList.remove("loading");
+                openCountEl.textContent = total ? String(open) : "—";
+            }
+            document.getElementById("statsSub").textContent = total
+                ? doneCount + " done · " + total + " total"
+                : "Waiting for tasks";
+
+            const barFill = document.getElementById("statsBarFill");
+            if (barFill) {
+                barFill.style.width = (total ? pct : 0) + "%";
+            }
+
+            renderRepoSummary(openTodos);
+            renderFilterPills(baseOpenTodos);
+
+            const empty = document.getElementById("emptyHint");
+            const root = document.getElementById("sectionsRoot");
+            root.replaceChildren();
+            root.classList.toggle("grouped", groupMode !== "list");
+
+            renderDiscovery(root);
+
+            const filterLabel = activeViewFilterLabel();
+            const filteredOut =
+                filter === "open" &&
+                !openTodos.length &&
+                baseOpenTodos.length > 0;
+
+            if (!total) {
+                empty.classList.add("hidden");
+                if (q || (filterLabel && filter !== "done")) {
+                    renderFilteredEmpty(root, filterLabel || "search");
+                } else if (!q) {
+                    const disc = boot.discovery || {};
+                    const hasDisc =
+                        (disc.missingPrs && disc.missingPrs.length) ||
+                        (disc.cloudAgents && disc.cloudAgents.length);
+                    if (!hasDisc) {
+                        empty.classList.remove("hidden");
+                    }
+                }
+                const disc = boot.discovery || {};
+                const footParts = [];
+                if (disc.scannedAt) footParts.push("Scan " + shortAt(disc.scannedAt));
+                footParts.push("Refreshed " + shortAt(boot.generatedAt));
+                renderFootMeta(footParts);
+                return;
+            }
+            empty.classList.add("hidden");
+
+            const showReconcileFirst = pillFilter === "needsReconcile" && reconcileItemCount() > 0;
+
+            if (filter === "open") {
+                if (openTodos.length) {
+                    renderOpen(root, openTodos);
+                } else if (filteredOut && filterLabel) {
+                    renderFilteredEmpty(root, filterLabel);
+                } else if (showReconcileFirst) {
+                    const hint = document.createElement("div");
+                    hint.className = "empty";
+                    hint.innerHTML = "<strong>Reconcile inbound PRs</strong> Attach or add rows in the section above.";
+                    root.appendChild(hint);
+                } else if (q && !baseOpenTodos.length) {
+                    renderFilteredEmpty(root, "search");
+                } else {
+                    const hint = document.createElement("div");
+                    hint.className = "empty";
+                    hint.innerHTML = "<strong>Inbox zero</strong> All tasks complete.";
+                    root.appendChild(hint);
+                }
+            } else if (filter === "all") {
+                if (openTodos.length) renderOpen(root, openTodos);
+                if (doneTodos.length) root.appendChild(listSection("Done", doneTodos, "var(--border)"));
+            } else if (doneTodos.length) {
+                root.appendChild(listSection("Done", doneTodos, "var(--border)"));
+            } else {
+                const hint = document.createElement("div");
+                hint.className = "empty";
+                hint.innerHTML = "<strong>Nothing done yet</strong> Complete a task to see it here.";
+                root.appendChild(hint);
+            }
+
+            const footParts = [];
+            if (groupMode === "list") footParts.push("Drag ⠿ to reorder");
+            if (activeTasks.updatedAt) {
+                footParts.push("Snapshot " + shortAt(activeTasks.updatedAt));
+            } else if (activeTasks.source) {
+                footParts.push("SQLite active work");
+            }
+            const disc = boot.discovery || {};
+            if (disc.scannedAt) footParts.push("Scan " + shortAt(disc.scannedAt));
+            footParts.push("Refreshed " + shortAt(boot.generatedAt));
+            renderFootMeta(footParts);
+
+            if (kbdFocusId) {
+                const focused = document.querySelector(
+                    '.task-card[data-id="' + CSS.escape(kbdFocusId) + '"]'
+                );
+                if (focused) {
+                    focused.classList.add("kbd-focus");
+                } else {
+                    kbdFocusId = null;
+                }
+            }
+        }
+
+        document.getElementById("quickAddTitle").addEventListener("input", (ev) => {
+            const form = document.getElementById("quickAddForm");
+            form.classList.toggle("has-text", Boolean(ev.target.value.trim()));
+        });
+
+        document.getElementById("quickAddForm").addEventListener("submit", (ev) => {
+            ev.preventDefault();
+            const titleEl = document.getElementById("quickAddTitle");
+            const statusEl = document.getElementById("quickAddStatus");
+            const title = titleEl.value.trim();
+            if (!title) return;
+            vscode.postMessage({
+                type: "quickAddWork",
+                title,
+                status: statusEl.value,
+            });
+            titleEl.value = "";
+            titleEl.focus();
+            document.getElementById("quickAddForm").classList.remove("has-text");
+        });
+
+        document.getElementById("emptyReconcileBtn").onclick = () => {
+            invalidateAndRefresh();
+        };
+        document.getElementById("emptyDbBtn").onclick = () => vscode.postMessage({ type: "openDatabase" });
+
+        function invalidateAndRefresh() {
+            document.getElementById("reloadBtn").classList.add("spinning");
+            vscode.postMessage({ type: "refresh" });
+        }
+
+        document.getElementById("taskSearch").addEventListener("input", (ev) => {
+            searchText = ev.target.value;
+            document
+                .getElementById("taskSearchClear")
+                .classList.toggle("hidden", !searchText.trim());
+            if (searchDebounce) {
+                clearTimeout(searchDebounce);
+            }
+            searchDebounce = setTimeout(() => {
+                searchDebounce = null;
+                scheduleRender();
+            }, 150);
+        });
+        document.getElementById("taskSearchClear").addEventListener("click", () => {
+            searchText = "";
+            document.getElementById("taskSearch").value = "";
+            document.getElementById("taskSearchClear").classList.add("hidden");
+            document.getElementById("taskSearch").focus();
+            scheduleRender();
+        });
+
+        document.querySelectorAll('.seg [data-filter]').forEach((btn) => {
+            btn.addEventListener("click", () => setFilter(btn.dataset.filter || "open"));
+            const on = btn.dataset.filter === filter;
+            btn.classList.toggle("active", on);
+            btn.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        document.getElementById("groupToggle").addEventListener("click", () => cycleGroupMode());
+        updateGroupToggleUi();
+
+        document.getElementById("reloadBtn").onclick = () => invalidateAndRefresh();
+        document.getElementById("popOutBtn").onclick = () => vscode.postMessage({ type: "popOut" });
+        document.getElementById("dbBtn").onclick = () => vscode.postMessage({ type: "openDatabase" });
+
+        function finishDone(mode) {
+            if (doneModalTodoId) {
+                vscode.postMessage({ type: "setDoneMode", id: doneModalTodoId, mode });
+            }
+            hideDoneModal();
+        }
+        document.getElementById("doneSessionBtn").onclick = () => finishDone("session");
+        document.getElementById("doneArchiveBtn").onclick = () => finishDone("archive");
+        document.getElementById("doneRemoveBtn").onclick = () => finishDone("remove");
+        document.getElementById("doneUndoBtn").onclick = () => hideDoneModal();
+        document.getElementById("doneModal").addEventListener("click", (ev) => {
+            if (ev.target.id === "doneModal") hideDoneModal();
+        });
+        document.addEventListener("keydown", (ev) => {
+            if (ev.key === "Escape" && doneModalTodoId) {
+                hideDoneModal();
+                return;
+            }
+            if (doneModalTodoId) return;
+            const tag = (ev.target && ev.target.tagName) || "";
+            if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
+
+            const cards = visibleTaskCards();
+            if (!cards.length) return;
+
+            if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+                ev.preventDefault();
+                let idx = cards.findIndex((c) => c.dataset.id === kbdFocusId);
+                if (idx < 0) idx = 0;
+                else idx += ev.key === "ArrowDown" ? 1 : -1;
+                idx = Math.max(0, Math.min(cards.length - 1, idx));
+                const nextId = cards[idx].dataset.id;
+                setKbdFocus(nextId);
+                cards[idx].focus();
+                cards[idx].scrollIntoView({ block: "nearest" });
+                return;
+            }
+
+            if (!kbdFocusId) return;
+            const todo = cardTodoById(kbdFocusId);
+            if (!todo) return;
+            if (ev.key === "Enter") {
+                ev.preventDefault();
+                toggleExpanded(todo.id);
+            } else if (ev.key === " " || ev.key === "x" || ev.key === "X") {
+                ev.preventDefault();
+                triggerDoneForTodo(todo);
+            }
+        });
+        window.addEventListener("message", (e) => {
+            if (e.data && e.data.type === "update") {
+                boot = e.data.payload;
+                document.getElementById("reloadBtn").classList.remove("spinning");
+                vscode.setState({ ...(vscode.getState() || {}), hasRendered: true });
+                scheduleRender();
+            }
+        });
+        scheduleRender();
+    </script>
+</body>
+
+</html>

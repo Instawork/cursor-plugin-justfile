@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Token telemetry</title>
+    <style>
+        :root {
+            --bg: #f4f7f6;
+            --panel: #fff;
+            --ink: #0f2744;
+            --muted: #5a6b7d;
+            --mint: #e8f5f0;
+            --teal: #0d9488;
+            --border: #d8e3de;
+            --warn: #b45309;
+            --hot: #dc2626;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--ink);
+            line-height: 1.45;
+        }
+
+        header {
+            padding: 1.25rem 1.5rem;
+            background: linear-gradient(135deg, #0f2744 0%, #134e4a 100%);
+            color: #f0fdf9;
+        }
+
+        header h1 {
+            margin: 0 0 0.25rem;
+            font-size: 1.35rem;
+            font-weight: 650;
+        }
+
+        header p {
+            margin: 0;
+            opacity: 0.85;
+            font-size: 0.875rem;
+        }
+
+        main {
+            padding: 1rem 1.5rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .toolbar label {
+            font-size: 0.8rem;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .chip {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            padding: 0.25rem 0.65rem;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .chip.on {
+            background: var(--teal);
+            color: #fff;
+            border-color: var(--teal);
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.85rem 1rem;
+        }
+
+        .card .k {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--muted);
+        }
+
+        .card .v {
+            font-size: 1.25rem;
+            font-weight: 650;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .charts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+        }
+
+        .panel h2 {
+            margin: 0 0 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        canvas.chart {
+            width: 100%;
+            height: 220px;
+            display: block;
+        }
+
+        .empty-hint {
+            padding: 1.25rem;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        #errorBanner {
+            display: none;
+            margin: 0 1.5rem 1rem;
+            padding: 0.75rem 1rem;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+
+        .table-wrap {
+            overflow: auto;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--panel);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        th,
+        td {
+            padding: 0.45rem 0.55rem;
+            text-align: right;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        th[data-align="left"],
+        td[data-align="left"] {
+            text-align: left;
+        }
+
+        th {
+            background: var(--mint);
+            cursor: pointer;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        th:hover {
+            background: #d1ebe3;
+        }
+
+        tr.event-agentTurn {}
+
+        tr.event-hourly {
+            background: #f8fafc;
+        }
+
+        tr.event-daily {
+            background: #f1f5f9;
+            font-weight: 500;
+        }
+
+        tr.event-preCompact {
+            background: #fff7ed;
+        }
+
+        td.heat-price {}
+
+        td.heat-ctx {}
+
+        .num-high {
+            color: var(--hot);
+            font-weight: 600;
+        }
+
+        .num-warn {
+            color: var(--warn);
+            font-weight: 600;
+        }
+
+        button {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            padding: 0.35rem 0.75rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        button:hover {
+            border-color: var(--teal);
+        }
+
+        footer {
+            margin-top: 1rem;
+            font-size: 0.75rem;
+            color: var(--muted);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Token telemetry</h1>
+        <p id="subtitle">Loading…</p>
+    </header>
+    <div id="errorBanner"></div>
+    <main>
+        <div class="toolbar">
+            <div class="chips" id="eventFilters"></div>
+            <label><input type="checkbox" id="granularOnly" /> Granular tail only</label>
+            <label><input type="checkbox" id="autoRefresh" checked /> Auto-reload (20s)</label>
+            <button type="button" id="reloadBtn">Reload now</button>
+        </div>
+        <div class="cards" id="cards"></div>
+        <div class="charts">
+            <div class="panel">
+                <h2>Cumulative cost (USD)</h2><canvas id="chartCost" class="chart" width="640" height="220"></canvas>
+            </div>
+            <div class="panel">
+                <h2>Tokens per row</h2><canvas id="chartTokens" class="chart" width="640" height="220"></canvas>
+            </div>
+        </div>
+        <div class="panel">
+            <h2>Rows <span id="rowCount" style="font-weight:400;color:var(--muted)"></span></h2>
+            <div class="table-wrap">
+                <table id="dataTable">
+                    <thead>
+                        <tr id="tableHead"></tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <footer id="footer"></footer>
+    </main>
+    <script>window.__TELEMETRY__ = __TELEMETRY_JSON__;</script>
+    <script>
+        (function () {
+            let boot;
+            try {
+                boot = window.__TELEMETRY__;
+                if (!boot || typeof boot !== "object") throw new Error("Missing telemetry payload");
+            } catch (e) {
+                const b = document.getElementById("errorBanner");
+                b.style.display = "block";
+                b.textContent = "Failed to load data: " + e.message;
+                return;
+            }
+
+            const rows = boot.rows || [];
+            const rates = boot.rates || {};
+            const st = boot.state || {};
+
+            const fmtInt = (n) => (n == null || n === "") ? "—" : Number(n).toLocaleString();
+            const fmtUsd = (n) => (n == null || n === "") ? "—" : "$" + Number(n).toFixed(4);
+            const fmtPct = (n) => (n == null || n === "") ? "—" : Number(n).toFixed(1) + "%";
+            const shortAt = (s) => {
+                if (!s) return "";
+                const d = new Date(s);
+                if (Number.isNaN(d.getTime())) return String(s).slice(0, 19);
+                return d.toISOString().replace("T", " ").slice(0, 19);
+            };
+
+            function utcDayKey(at) {
+                if (!at) return "";
+                const d = new Date(at);
+                if (Number.isNaN(d.getTime())) return String(at).slice(0, 10);
+                return d.toISOString().slice(0, 10);
+            }
+
+            function rowIdentity(r) {
+                return [r.at, r.event, r.generation_id, r.conversation_id].join("|");
+            }
+
+            function buildDayCumulativeMap(allRows) {
+                const sorted = allRows.slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+                const running = {};
+                const map = new Map();
+                for (const r of sorted) {
+                    const ev = r.event || "";
+                    if (ev !== "agentTurn" && ev !== "hourly") continue;
+                    const day = utcDayKey(r.at);
+                    if (!running[day]) running[day] = { cost_usd: 0 };
+                    running[day].cost_usd += Number(r.cost_usd || 0);
+                    map.set(rowIdentity(r), running[day].cost_usd);
+                }
+                return map;
+            }
+
+            function totalsForUtcDay(allRows, dayKey) {
+                let cost_usd = 0;
+                for (const r of allRows) {
+                    const ev = r.event || "";
+                    if (ev !== "agentTurn" && ev !== "hourly") continue;
+                    if (utcDayKey(r.at) !== dayKey) continue;
+                    cost_usd += Number(r.cost_usd || 0);
+                }
+                return cost_usd;
+            }
+
+            const dayCumMap = buildDayCumulativeMap(rows);
+            const todayKey = new Date().toISOString().slice(0, 10);
+            const dayCost = totalsForUtcDay(rows, todayKey);
+
+            const priceLabel = boot.priceMode || "model";
+            let priceDetail = " · $" + (rates.total ?? 0.35) + "/M flat";
+            if (priceLabel === "decomposed") {
+                priceDetail = " · $" + rates.input + "/M in, $" + rates.output + "/M out";
+            } else if (priceLabel === "model") {
+                priceDetail = " · model $/M table (cursor-model-rates.json)";
+            }
+            document.getElementById("subtitle").textContent =
+                "Generated " + shortAt(boot.generatedAt) + " UTC · pricing: " + priceLabel + priceDetail;
+
+            const last = rows.length ? rows[rows.length - 1] : null;
+            const conv = st.conversation_id;
+            let sessionTurns = rows.filter((r) => r.event === "agentTurn");
+            if (conv) {
+                const scoped = sessionTurns.filter((r) => r.conversation_id === conv);
+                if (scoped.length) sessionTurns = scoped;
+            }
+            const sessionLast = sessionTurns.length ? sessionTurns[sessionTurns.length - 1] : last;
+            const sessionCost = sessionTurns.reduce((s, r) => s + Number(r.cost_usd || 0), 0);
+            const sessionTok = sessionTurns.reduce((s, r) => s + Number(r.total_tokens || 0), 0);
+            const sessionOut = sessionTurns.reduce((s, r) => s + Number(r.output_tokens || 0), 0);
+            const cardDefs = [
+                ["Day cost (UTC)", fmtUsd(dayCost)],
+                ["Chat cost", fmtUsd(sessionCost)],
+                ["Chat tokens", fmtInt(sessionTok)],
+                ["Chat output", fmtInt(sessionOut)],
+                ["Turns", fmtInt(sessionTurns.length)],
+                ["Last context", fmtPct(sessionLast?.context_usage_percent)],
+                ["Last turn $", fmtUsd(sessionLast?.cost_usd)],
+            ];
+            const cardsEl = document.getElementById("cards");
+            cardDefs.forEach(([k, v], i) => {
+                const el = document.createElement("div");
+                el.className = "card";
+                el.innerHTML = "<div class=\"k\">" + k + "</div><div class=\"v\" id=\"cardv" + i + "\">" + v + "</div>";
+                cardsEl.appendChild(el);
+            });
+
+            const eventTypes = [...new Set(rows.map((r) => r.event).filter(Boolean))];
+            let eventFilter = null;
+
+            const filtersEl = document.getElementById("eventFilters");
+            function addChip(label, value) {
+                const c = document.createElement("span");
+                c.className = "chip on";
+                c.textContent = label;
+                c.dataset.event = value;
+                c.onclick = () => {
+                    if (value === "all") {
+                        eventFilter = null;
+                        filtersEl.querySelectorAll(".chip").forEach((x) => x.classList.add("on"));
+                    } else {
+                        c.classList.toggle("on");
+                        const on = [...filtersEl.querySelectorAll(".chip.on")]
+                            .map((x) => x.dataset.event)
+                            .filter((x) => x && x !== "all");
+                        eventFilter = on.length ? new Set(on) : null;
+                        const allChip = filtersEl.querySelector('[data-event="all"]');
+                        if (allChip) allChip.classList.toggle("on", eventFilter === null);
+                    }
+                    renderTable();
+                    renderCharts();
+                };
+                filtersEl.appendChild(c);
+            }
+            addChip("all", "all");
+            eventTypes.forEach((ev) => addChip(ev, ev));
+
+            const granularOnly = document.getElementById("granularOnly");
+            granularOnly.onchange = () => { renderTable(); renderCharts(); };
+
+            let sortKey = "at";
+            let sortDir = 1;
+
+            function filteredRows() {
+                let list = rows.slice();
+                if (eventFilter) list = list.filter((r) => eventFilter.has(r.event));
+                if (granularOnly.checked) list = list.filter((r) => r.event === "agentTurn");
+                return list.sort((a, b) => {
+                    const av = a[sortKey], bv = b[sortKey];
+                    if (sortKey === "at") return sortDir * String(av).localeCompare(String(bv));
+                    return sortDir * (Number(av || 0) - Number(bv || 0));
+                });
+            }
+
+            const cols = [
+                ["at", "Time", shortAt],
+                ["event", "Event", (v) => v],
+                ["model", "Model", (v) => v || "—"],
+                ["input_uncached_tokens", "In (new)", fmtInt],
+                ["cache_read_tokens", "Cache R", fmtInt],
+                ["output_tokens", "Out", fmtInt],
+                ["total_tokens", "Total", fmtInt],
+                ["cost_usd", "Cost", fmtUsd],
+                ["cumulative_cost_usd", "Cum $", fmtUsd],
+                ["context_usage_percent", "Ctx %", fmtPct],
+            ];
+
+            const head = document.getElementById("tableHead");
+            const leftCols = new Set(["at", "event", "model"]);
+            cols.forEach(([key, label]) => {
+                const th = document.createElement("th");
+                th.textContent = label;
+                if (leftCols.has(key)) th.dataset.align = "left";
+                th.onclick = () => {
+                    if (sortKey === key) sortDir *= -1;
+                    else { sortKey = key; sortDir = 1; }
+                    renderTable();
+                };
+                head.appendChild(th);
+            });
+
+            function heatClass(val, kind) {
+                if (val == null || val === "") return "";
+                const n = Number(val);
+                if (kind === "price") {
+                    if (n >= 0.2) return "num-high";
+                    if (n >= 0.08) return "num-warn";
+                }
+                if (kind === "ctx") {
+                    if (n >= 90) return "num-high";
+                    if (n >= 75) return "num-warn";
+                }
+                return "";
+            }
+
+            function renderTable() {
+                const list = filteredRows();
+                document.getElementById("cardv3").textContent = fmtInt(sessionTurns.length);
+                document.getElementById("rowCount").textContent = "(" + list.length + ")";
+                const body = document.getElementById("tableBody");
+                body.replaceChildren();
+                if (!list.length) {
+                    const tr = document.createElement("tr");
+                    const td = document.createElement("td");
+                    td.colSpan = cols.length;
+                    td.className = "empty-hint";
+                    td.textContent = rows.length
+                        ? "No rows match filters."
+                        : "No telemetry yet. Complete an agent turn with hooks enabled, then reload.";
+                    tr.appendChild(td);
+                    body.appendChild(tr);
+                    return;
+                }
+                const prices = list.map((r) => Number(r.cost_usd || 0)).filter((x) => x > 0);
+                const maxP = prices.length ? Math.max(...prices) : 1;
+                list.forEach((r) => {
+                    const tr = document.createElement("tr");
+                    tr.className = "event-" + (r.event || "");
+                    cols.forEach(([key, , fmt]) => {
+                        const td = document.createElement("td");
+                        let raw = r[key];
+                        if (key === "cumulative_cost_usd") {
+                            raw = dayCumMap.has(rowIdentity(r))
+                                ? dayCumMap.get(rowIdentity(r))
+                                : raw;
+                        }
+                        td.textContent = fmt(raw);
+                        if (key === "at" || key === "event" || key === "model") {
+                            td.dataset.align = "left";
+                        }
+                        if (key === "cost_usd") {
+                            td.className = "heat-price " + heatClass(raw, "price");
+                            const t = Math.min(1, Number(raw || 0) / maxP);
+                            td.style.background = "rgba(13,148,136," + (0.08 + t * 0.35) + ")";
+                        }
+                        if (key === "context_usage_percent") {
+                            td.className = "heat-ctx " + heatClass(raw, "ctx");
+                        }
+                        tr.appendChild(td);
+                    });
+                    body.appendChild(tr);
+                });
+            }
+
+            function setupCanvas(canvas) {
+                const dpr = window.devicePixelRatio || 1;
+                const w = canvas.clientWidth || 640;
+                const h = 220;
+                canvas.width = Math.floor(w * dpr);
+                canvas.height = Math.floor(h * dpr);
+                const ctx = canvas.getContext("2d");
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                return { ctx, w, h };
+            }
+
+            function drawLineChart(canvas, values, formatY) {
+                const { ctx, w, h } = setupCanvas(canvas);
+                ctx.clearRect(0, 0, w, h);
+                const pad = { l: 48, r: 12, t: 12, b: 28 };
+                const innerW = w - pad.l - pad.r;
+                const innerH = h - pad.t - pad.b;
+                if (!values.length) {
+                    ctx.fillStyle = "#5a6b7d";
+                    ctx.font = "13px system-ui,sans-serif";
+                    ctx.fillText("No data", pad.l, h / 2);
+                    return;
+                }
+                const minV = Math.min(...values);
+                const maxV = Math.max(...values);
+                const span = maxV - minV || maxV || 1;
+                ctx.strokeStyle = "#d8e3de";
+                ctx.beginPath();
+                ctx.moveTo(pad.l, pad.t);
+                ctx.lineTo(pad.l, pad.t + innerH);
+                ctx.lineTo(pad.l + innerW, pad.t + innerH);
+                ctx.stroke();
+                ctx.fillStyle = "#5a6b7d";
+                ctx.font = "11px system-ui,sans-serif";
+                ctx.fillText(formatY(maxV), 4, pad.t + 10);
+                ctx.fillText(formatY(minV), 4, pad.t + innerH);
+                ctx.beginPath();
+                values.forEach((v, i) => {
+                    const x = pad.l + (values.length === 1 ? innerW / 2 : (i / (values.length - 1)) * innerW);
+                    const y = pad.t + innerH - ((v - minV) / span) * innerH;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.strokeStyle = "#0d9488";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.lineTo(pad.l + innerW, pad.t + innerH);
+                ctx.lineTo(pad.l, pad.t + innerH);
+                ctx.closePath();
+                ctx.fillStyle = "rgba(13,148,136,0.12)";
+                ctx.fill();
+            }
+
+            function drawBarChart(canvas, seriesA, seriesB) {
+                const { ctx, w, h } = setupCanvas(canvas);
+                ctx.clearRect(0, 0, w, h);
+                const pad = { l: 48, r: 12, t: 12, b: 28 };
+                const innerW = w - pad.l - pad.r;
+                const innerH = h - pad.t - pad.b;
+                const n = seriesA.length;
+                if (!n) {
+                    ctx.fillStyle = "#5a6b7d";
+                    ctx.font = "13px system-ui,sans-serif";
+                    ctx.fillText("No data", pad.l, h / 2);
+                    return;
+                }
+                const maxV = Math.max(...seriesA.map((v, i) => (v || 0) + (seriesB[i] || 0)), 1);
+                const gap = 2;
+                const barW = Math.max(2, (innerW - gap * (n - 1)) / n);
+                ctx.strokeStyle = "#d8e3de";
+                ctx.beginPath();
+                ctx.moveTo(pad.l, pad.t + innerH);
+                ctx.lineTo(pad.l + innerW, pad.t + innerH);
+                ctx.stroke();
+                for (let i = 0; i < n; i++) {
+                    const x = pad.l + i * (barW + gap);
+                    const a = seriesA[i] || 0;
+                    const b = seriesB[i] || 0;
+                    const hB = (b / maxV) * innerH;
+                    const hA = (a / maxV) * innerH;
+                    ctx.fillStyle = "rgba(13,148,136,0.85)";
+                    ctx.fillRect(x, pad.t + innerH - hB, barW, hB);
+                    ctx.fillStyle = "rgba(15,39,68,0.85)";
+                    ctx.fillRect(x, pad.t + innerH - hB - hA, barW, hA);
+                }
+            }
+
+            function renderCharts() {
+                const list = filteredRows();
+                const cumCost = list.map((r) => Number(r.cumulative_cost_usd || 0));
+                const inp = list.map((r) => Number(r.input_uncached_tokens || 0) + Number(r.cache_read_tokens || 0));
+                const out = list.map((r) => Number(r.output_tokens || 0));
+                drawLineChart(document.getElementById("chartCost"), cumCost, (v) => "$" + v.toFixed(3));
+                drawBarChart(document.getElementById("chartTokens"), inp, out);
+            }
+
+            renderTable();
+            renderCharts();
+            window.addEventListener("resize", () => renderCharts());
+
+            const conv = st.conversation_id;
+            document.getElementById("footer").textContent =
+                "CSV: " + (boot.csvPath || "") +
+                " · Conversation " + (conv ? String(conv).slice(0, 8) + "…" : "—");
+
+            document.getElementById("reloadBtn").onclick = () => location.reload();
+
+            const auto = document.getElementById("autoRefresh");
+            let refreshTimer;
+            function syncRefresh() {
+                clearInterval(refreshTimer);
+                if (auto.checked) refreshTimer = setInterval(() => location.reload(), 20000);
+            }
+            auto.onchange = syncRefresh;
+            syncRefresh();
+        })();
+    </script>
+</body>
+
+</html>

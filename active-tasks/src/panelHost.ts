@@ -1,0 +1,383 @@
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import * as vscode from "vscode";
+import {
+  insertWorkFromQuickAdd,
+  removeTaskRow,
+  reorderTasks,
+  setTodoDone,
+  setTodoDonePersistent,
+  updateTaskFields,
+} from "./activeTasks";
+import { activeTasksDbPath } from "./activeTasksStore";
+import type { TaskFieldUpdate } from "./taskModel";
+import { coerceOpenGitHubPr } from "./githubOpenPrs";
+import {
+  invalidateTaskDiscoveryCache,
+  loadTaskDiscovery,
+  reconcileAddPr,
+  reconcileAttachPr,
+  reconcileDismissItem,
+} from "./discovery";
+import {
+  activeTasksStatusBarText,
+  loadActiveTasksPayload,
+  type ActiveTasksPayload,
+} from "./payload";
+import { detectWorkspaceMatch } from "./workspaceContext";
+
+const VIEW_ID = "activeTasks.panel";
+const HTML_FILE = "active-tasks-panel.html";
+const POPOUT_TITLE = "Active tasks";
+
+function tasksTooltip(payload: ActiveTasksPayload): vscode.MarkdownString {
+  const md = new vscode.MarkdownString(undefined, true);
+  md.isTrusted = true;
+  const todos = payload.activeTasks.todos || [];
+  const open = todos.filter((t) => !t.done).length;
+  const done = todos.length - open;
+  md.appendMarkdown("### Active Tasks\n\n");
+  md.appendMarkdown("**Overview**\n");
+  if (todos.length) {
+    md.appendMarkdown(
+      `- Open: **${open}**\n- Done: **${done}**\n- Total: **${todos.length}**`
+    );
+  } else {
+    md.appendMarkdown("- No active tasks loaded.");
+  }
+  const d = payload.discovery;
+  if (d.missingPrs.length || d.staleTrackedPrs.length) {
+    md.appendMarkdown(
+      `\n- Reconcile: **${d.missingPrs.length}** untracked PRs, **${d.staleTrackedPrs.length}** stale`
+    );
+  }
+  md.appendMarkdown("\n\n---\n\n");
+  md.appendMarkdown("**Actions**\n");
+  md.appendMarkdown(
+    "[Open panel](command:activeTasks.open) · [Pop out](command:activeTasks.popOut) · [Refresh](command:activeTasks.refresh)"
+  );
+  return md;
+}
+
+export class SidebarPanelProvider implements vscode.WebviewViewProvider {
+  constructor(private readonly host: PanelHost) {}
+
+  resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    _context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken
+  ): void {
+    this.host.bindSidebar(webviewView);
+  }
+}
+
+export class PanelHost {
+  private sidebar: vscode.WebviewView | undefined;
+  private popout: vscode.WebviewPanel | undefined;
+  private wired = new WeakSet<vscode.Webview>();
+  private htmlLoaded = new WeakSet<vscode.Webview>();
+  private statusBar: vscode.StatusBarItem;
+  private refreshGen = 0;
+  private pushTimer: NodeJS.Timeout | undefined;
+  private pendingPush: { forceDiscovery?: boolean; skipDiscovery?: boolean } = {};
+
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    private readonly context: vscode.ExtensionContext
+  ) {
+    this.statusBar = vscode.window.createStatusBarItem(
+      vscode.StatusBarAlignment.Left,
+      39
+    );
+    this.statusBar.name = "Active Tasks";
+    this.statusBar.command = "activeTasks.open";
+    this.statusBar.backgroundColor = new vscode.ThemeColor(
+      "statusBarItem.prominentBackground"
+    );
+    this.statusBar.tooltip =
+      "Active tasks status. Click to open the activity panel.";
+    this.statusBar.show();
+  }
+
+  dispose(): void {
+    this.statusBar.dispose();
+    this.popout?.dispose();
+    this.popout = undefined;
+  }
+
+  bindSidebar(view: vscode.WebviewView): void {
+    this.sidebar = view;
+    this.wireWebview(view.webview);
+    view.onDidDispose(() => {
+      if (this.sidebar === view) {
+        this.sidebar = undefined;
+      }
+    });
+    this.pushUpdate();
+  }
+
+  popOut(): void {
+    if (this.popout) {
+      this.popout.reveal(vscode.ViewColumn.Beside, true);
+      this.pushUpdate();
+      return;
+    }
+
+    const panel = vscode.window.createWebviewPanel(
+      VIEW_ID + ".popout",
+      POPOUT_TITLE,
+      vscode.ViewColumn.Beside,
+      { enableScripts: true, retainContextWhenHidden: true }
+    );
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "media", "icon.svg");
+    this.popout = panel;
+    this.wireWebview(panel.webview);
+    panel.onDidDispose(() => {
+      if (this.popout === panel) {
+        this.popout = undefined;
+      }
+    });
+    this.pushUpdate();
+  }
+
+  private workspaceContext() {
+    return detectWorkspaceMatch(vscode.workspace.workspaceFolders);
+  }
+
+  pushUpdate(options?: {
+    forceDiscovery?: boolean;
+    skipDiscovery?: boolean;
+  }): void {
+    if (options?.forceDiscovery) {
+      this.pendingPush.forceDiscovery = true;
+      this.pendingPush.skipDiscovery = false;
+    } else if (options?.skipDiscovery) {
+      this.pendingPush.skipDiscovery = true;
+    }
+    if (this.pushTimer) {
+      return;
+    }
+    this.pushTimer = setTimeout(() => {
+      this.pushTimer = undefined;
+      const opts = this.pendingPush;
+      this.pendingPush = {};
+      this.flushPushUpdate(opts);
+    }, 120);
+  }
+
+  private flushPushUpdate(options?: {
+    forceDiscovery?: boolean;
+    skipDiscovery?: boolean;
+  }): void {
+    const workspace = this.workspaceContext();
+    const payload = loadActiveTasksPayload(workspace);
+    this.post({ type: "update", payload });
+    this.statusBar.text = activeTasksStatusBarText(payload);
+    this.statusBar.tooltip = tasksTooltip(payload);
+
+    if (options?.skipDiscovery && !options?.forceDiscovery) {
+      return;
+    }
+
+    const gen = ++this.refreshGen;
+    void loadTaskDiscovery(
+      this.context.secrets,
+      payload.activeTasks.todos,
+      workspace,
+      { force: options?.forceDiscovery }
+    ).then((discovery) => {
+      if (gen !== this.refreshGen) {
+        return;
+      }
+      const next: ActiveTasksPayload = {
+        ...loadActiveTasksPayload(workspace),
+        discovery,
+      };
+      this.post({ type: "update", payload: next });
+      this.statusBar.text = activeTasksStatusBarText(next);
+      this.statusBar.tooltip = tasksTooltip(next);
+    });
+  }
+
+  private post(message: { type: string; payload: ActiveTasksPayload }): void {
+    const targets: vscode.Webview[] = [];
+    if (this.sidebar) {
+      targets.push(this.sidebar.webview);
+    }
+    if (this.popout) {
+      targets.push(this.popout.webview);
+    }
+    for (const webview of targets) {
+      void webview.postMessage(message);
+    }
+  }
+
+  private openWorktreePath(raw: string): void {
+    if (!raw || raw.includes("\0")) {
+      return;
+    }
+    const expanded = raw.startsWith("~")
+      ? path.join(os.homedir(), raw.slice(1).replace(/^\//, ""))
+      : path.resolve(raw);
+    const normalized = path.normalize(expanded);
+    if (!fs.existsSync(normalized)) {
+      void vscode.window.showWarningMessage(`Worktree not found: ${normalized}`);
+      return;
+    }
+    void vscode.commands.executeCommand(
+      "vscode.openFolder",
+      vscode.Uri.file(normalized),
+      { forceNewWindow: false }
+    );
+  }
+
+  private wireWebview(webview: vscode.Webview): void {
+    if (!this.wired.has(webview)) {
+      this.wired.add(webview);
+      webview.onDidReceiveMessage((msg: Record<string, unknown>) => {
+        const type = msg.type;
+        if (type === "openUrl" && typeof msg.url === "string") {
+          const url = msg.url.trim();
+          if (/^https?:\/\//i.test(url)) {
+            void vscode.env.openExternal(vscode.Uri.parse(url));
+          }
+          return;
+        }
+        if (type === "openWorktree" && typeof msg.path === "string") {
+          this.openWorktreePath(msg.path.trim());
+          return;
+        }
+        if (type === "openDatabase") {
+          const db = activeTasksDbPath();
+          void vscode.window.showTextDocument(vscode.Uri.file(db), {
+            preview: false,
+          });
+          return;
+        }
+        if (type === "refresh") {
+          invalidateTaskDiscoveryCache();
+          this.pushUpdate({ forceDiscovery: true });
+          return;
+        }
+        if (type === "popOut") {
+          this.popOut();
+          return;
+        }
+        if (type === "toggleTodo" && typeof msg.id === "string") {
+          setTodoDone(msg.id, Boolean(msg.done));
+          this.pushUpdate({ skipDiscovery: true });
+          return;
+        }
+        if (
+          type === "setDoneMode" &&
+          typeof msg.id === "string" &&
+          typeof msg.mode === "string"
+        ) {
+          const mode = msg.mode;
+          if (mode === "session" || mode === "remove" || mode === "archive") {
+            setTodoDonePersistent(msg.id, mode);
+            invalidateTaskDiscoveryCache();
+            this.pushUpdate({ forceDiscovery: true });
+          }
+          return;
+        }
+        if (type === "reorderTodos" && Array.isArray(msg.order)) {
+          const ids = msg.order.filter(
+            (x): x is string => typeof x === "string"
+          );
+          if (ids.length) {
+            reorderTasks(ids);
+            this.pushUpdate({ skipDiscovery: true });
+          }
+          return;
+        }
+        if (
+          type === "updateTodo" &&
+          typeof msg.id === "string" &&
+          msg.fields &&
+          typeof msg.fields === "object"
+        ) {
+          if (updateTaskFields(msg.id, msg.fields as TaskFieldUpdate)) {
+            this.pushUpdate({ forceDiscovery: true });
+          }
+          return;
+        }
+        if (type === "reconcileAddPr" && msg.pr && typeof msg.pr === "object") {
+          const pr = coerceOpenGitHubPr(msg.pr);
+          if (pr) {
+            reconcileAddPr(pr);
+            invalidateTaskDiscoveryCache();
+            this.pushUpdate({ forceDiscovery: true });
+          }
+          return;
+        }
+        if (
+          type === "reconcileAttachPr" &&
+          typeof msg.workId === "string" &&
+          msg.pr &&
+          typeof msg.pr === "object"
+        ) {
+          const pr = coerceOpenGitHubPr(msg.pr);
+          if (pr) {
+            reconcileAttachPr(msg.workId.trim(), pr);
+            invalidateTaskDiscoveryCache();
+            this.pushUpdate({ forceDiscovery: true });
+          }
+          return;
+        }
+        if (
+          type === "reconcileDismiss" &&
+          typeof msg.kind === "string" &&
+          typeof msg.refKey === "string"
+        ) {
+          const kind = msg.kind;
+          if (kind !== "pr" && kind !== "cloud") {
+            return;
+          }
+          const refKey = msg.refKey.trim();
+          if (!refKey) {
+            return;
+          }
+          reconcileDismissItem(kind, refKey);
+          invalidateTaskDiscoveryCache();
+          this.pushUpdate({ forceDiscovery: true });
+          return;
+        }
+        if (type === "reconcileRemoveRow" && typeof msg.id === "string") {
+          removeTaskRow(msg.id);
+          invalidateTaskDiscoveryCache();
+          this.pushUpdate({ forceDiscovery: true });
+          return;
+        }
+        if (type === "quickAddWork" && typeof msg.title === "string") {
+          const title = msg.title.trim();
+          const status =
+            typeof msg.status === "string" && msg.status.trim()
+              ? msg.status.trim()
+              : "in progress";
+          if (title) {
+            const ws = this.workspaceContext();
+            insertWorkFromQuickAdd(title, status, ws.repoKey ?? null);
+            invalidateTaskDiscoveryCache();
+            this.pushUpdate({ forceDiscovery: true });
+          }
+          return;
+        }
+      });
+    }
+    webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this.extensionUri],
+    };
+    const htmlPath = vscode.Uri.joinPath(
+      this.extensionUri,
+      "media",
+      HTML_FILE
+    );
+    if (!this.htmlLoaded.has(webview)) {
+      this.htmlLoaded.add(webview);
+      webview.html = fs.readFileSync(htmlPath.fsPath, "utf8");
+    }
+  }
+}

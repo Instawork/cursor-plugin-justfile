@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Token telemetry</title>
+    <style>
+        :root {
+            --bg: var(--vscode-sideBar-background, #f4f7f6);
+            --panel: var(--vscode-editor-background, #fff);
+            --ink: var(--vscode-foreground, #0f2744);
+            --muted: var(--vscode-descriptionForeground, #5a6b7d);
+            --border: var(--vscode-panel-border, #d8e3de);
+            --head: var(--vscode-list-hoverBackground, #e8f5f0);
+            --warn: #b45309;
+            --hot: #dc2626;
+            --ok: #0d9488;
+            --warn-bg: rgba(180, 83, 9, 0.14);
+            --hot-bg: rgba(220, 38, 38, 0.14);
+            --mid-bg: rgba(13, 148, 136, 0.1);
+            --latest-bg: rgba(13, 148, 136, 0.06);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: var(--vscode-font-family, ui-sans-serif, system-ui, sans-serif);
+            font-size: var(--vscode-font-size, 16px);
+            background: var(--bg);
+            color: var(--ink);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem;
+            align-items: center;
+            padding: .35rem .5rem;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .toolbar label {
+            font-size: 1em;
+            color: var(--muted);
+        }
+
+        .col-toggles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem .55rem;
+            align-items: center;
+            padding: .25rem .5rem .35rem;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .col-toggles span.k {
+            font-size: .85rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: var(--muted);
+            margin-right: .15rem;
+        }
+
+        .col-toggles label {
+            font-size: .95em;
+        }
+
+        .tasks-header {
+            flex-shrink: 0;
+            padding: .5rem .55rem .55rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel);
+            max-height: 42vh;
+            overflow-y: auto;
+        }
+
+        .tasks-header h2 {
+            margin: 0 0 .45rem;
+            font-size: .85rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: var(--muted);
+            font-weight: 650;
+        }
+
+        .task-cards {
+            display: flex;
+            flex-direction: column;
+            gap: .45rem;
+        }
+
+        .task-card {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: .5rem .55rem .55rem;
+            background: var(--bg);
+            box-shadow: 0 1px 0 rgba(15, 39, 68, 0.04);
+        }
+
+        .task-card.done {
+            opacity: 0.78;
+            background: var(--panel);
+        }
+
+        .task-card-head {
+            display: flex;
+            align-items: flex-start;
+            gap: .45rem;
+        }
+
+        .task-card-head input[type="checkbox"] {
+            width: 1.05rem;
+            height: 1.05rem;
+            margin-top: .15rem;
+            flex-shrink: 0;
+        }
+
+        .task-card-body {
+            flex: 1;
+            min-width: 0;
+            cursor: pointer;
+        }
+
+        .task-card.done .todo-title {
+            text-decoration: line-through;
+            color: var(--muted);
+        }
+
+        .todo-title {
+            font-weight: 650;
+            font-size: 1.02em;
+            line-height: 1.35;
+        }
+
+        .todo-title a {
+            color: var(--vscode-textLink-foreground, var(--ok));
+            text-decoration: none;
+        }
+
+        .todo-title a:hover {
+            text-decoration: underline;
+        }
+
+        .todo-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .3rem .4rem;
+            margin-top: .35rem;
+            font-size: .82em;
+            color: var(--muted);
+        }
+
+        .todo-chip {
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: .05rem .35rem;
+            background: var(--panel);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .todo-chip.repo {
+            font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+            font-size: .95em;
+        }
+
+        .todo-chip.pr a {
+            color: var(--vscode-textLink-foreground, var(--ok));
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .todo-chip.pr a:hover {
+            text-decoration: underline;
+        }
+
+        .todo-detail {
+            margin-top: .35rem;
+            padding-top: .35rem;
+            border-top: 1px dashed var(--border);
+            font-size: .88em;
+            color: var(--muted);
+            line-height: 1.35;
+            word-break: break-word;
+        }
+
+        .tasks-header .tasks-meta {
+            margin-top: .45rem;
+            font-size: .85em;
+            color: var(--muted);
+        }
+
+        .tasks-header.empty {
+            display: none;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+            gap: .25rem .5rem;
+            padding: .4rem .5rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel);
+            flex-shrink: 0;
+        }
+
+        .summary dt {
+            margin: 0;
+            font-size: .8rem;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            color: var(--muted);
+        }
+
+        .summary dd {
+            margin: 0;
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            font-size: 1.15rem;
+        }
+
+        .table-wrap {
+            flex: 1;
+            overflow: auto;
+            min-height: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 1.05em;
+        }
+
+        th,
+        td {
+            padding: .45rem .5rem;
+            text-align: right;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        th.col-left,
+        td.col-left {
+            text-align: left;
+        }
+
+        table {
+            table-layout: fixed;
+        }
+
+        th {
+            background: var(--head);
+            position: sticky;
+            top: 0;
+            cursor: pointer;
+            font-weight: 600;
+            z-index: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        td {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        tr.event-hourly td {
+            color: var(--muted);
+        }
+
+        tr.event-daily td {
+            color: var(--muted);
+            font-style: italic;
+        }
+
+        tr.row-latest td:first-child {
+            box-shadow: inset 3px 0 0 var(--ok);
+        }
+
+        tr.row-latest td {
+            background: var(--latest-bg);
+        }
+
+        .num-mid {
+            color: var(--ok);
+            font-weight: 600;
+        }
+
+        .num-warn {
+            color: var(--warn);
+            font-weight: 600;
+        }
+
+        .num-high {
+            color: var(--hot);
+            font-weight: 600;
+        }
+
+        .cf-bg-mid {
+            background-color: var(--mid-bg);
+        }
+
+        .cf-bg-warn {
+            background-color: var(--warn-bg);
+        }
+
+        .cf-bg-hot {
+            background-color: var(--hot-bg);
+        }
+
+        .summary dd.cf-bg-warn,
+        .summary dd.cf-bg-hot,
+        .summary dd.cf-bg-mid {
+            border-radius: 3px;
+            padding: 0 .15rem;
+        }
+
+        .summary dd.num-warn,
+        .summary dd.num-high,
+        .summary dd.num-mid {
+            font-weight: 700;
+        }
+
+        .empty-hint {
+            padding: .75rem;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        #errorBanner {
+            display: none;
+            padding: .35rem .5rem;
+            background: #fef2f2;
+            border-bottom: 1px solid #fecaca;
+            color: #991b1b;
+            flex-shrink: 0;
+        }
+
+        button {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            padding: .35rem .6rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        .toolbar input[type="checkbox"],
+        .col-toggles input[type="checkbox"] {
+            width: 1rem;
+            height: 1rem;
+            vertical-align: middle;
+        }
+
+        .model {
+            max-width: 6.5rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="errorBanner"></div>
+    <div class="toolbar">
+        <button type="button" id="reloadBtn">Refresh</button>
+        <label><input type="checkbox" id="granularOnly" checked /> Turns only</label>
+        <span id="meta" style="color:var(--muted);font-size:1em;margin-left:auto"></span>
+    </div>
+    <div class="col-toggles" id="colToggles">
+        <span class="k">Columns</span>
+    </div>
+    <section class="tasks-header empty" id="tasksHeader" aria-label="Active work">
+        <h2>Active work</h2>
+        <div class="task-cards" id="tasksList"></div>
+        <div class="tasks-meta" id="tasksMeta"></div>
+    </section>
+    <dl class="summary" id="summary"></dl>
+    <div class="table-wrap">
+        <table>
+            <colgroup id="tableCols"></colgroup>
+            <thead>
+                <tr id="tableHead"></tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+    <script>
+        const vscode = acquireVsCodeApi();
+        let boot = { rows: [], state: {}, rates: {} };
+        let sortKey = "at", sortDir = -1;
+        const HIDEABLE = new Set([
+            "event",
+            "model",
+            "_in",
+            "output_tokens",
+            "context_usage_percent",
+        ]);
+        const savedUi = vscode.getState() || {};
+        let hiddenCols = new Set(savedUi.hiddenCols || []);
+
+        function persistUi() {
+            vscode.setState({ ...vscode.getState(), hiddenCols: [...hiddenCols] });
+        }
+
+        function isColVisible(key) {
+            if (!HIDEABLE.has(key)) return true;
+            return !hiddenCols.has(key);
+        }
+
+        function visibleCols() {
+            return cols.filter(([key]) => isColVisible(key));
+        }
+
+        function initColToggles() {
+            const wrap = document.getElementById("colToggles");
+            HIDEABLE.forEach((key) => {
+                const col = cols.find((c) => c[0] === key);
+                if (!col) return;
+                const label = document.createElement("label");
+                const input = document.createElement("input");
+                input.type = "checkbox";
+                input.dataset.col = key;
+                input.checked = isColVisible(key);
+                input.addEventListener("change", () => {
+                    if (input.checked) hiddenCols.delete(key);
+                    else hiddenCols.add(key);
+                    persistUi();
+                    if (!isColVisible(sortKey)) {
+                        sortKey = "at";
+                        sortDir = -1;
+                    }
+                    renderAll();
+                });
+                label.appendChild(input);
+                label.appendChild(document.createTextNode(" " + col[1]));
+                wrap.appendChild(label);
+            });
+        }
+
+        const fmtInt = (n) => (n == null || n === "") ? "—" : Number(n).toLocaleString();
+        const fmtUsd = (n) => (n == null || n === "") ? "—" : "$" + Number(n).toFixed(2);
+        const fmtPct = (n) => (n == null || n === "") ? "—" : Number(n).toFixed(2) + "%";
+
+        const shortAt = (s) => {
+            if (!s) return "";
+            const d = new Date(s);
+            if (Number.isNaN(d.getTime())) return String(s).slice(5, 16);
+            const mm = String(d.getMonth() + 1).padStart(2, "0");
+            const dd = String(d.getDate()).padStart(2, "0");
+            const hh = String(d.getHours()).padStart(2, "0");
+            const mi = String(d.getMinutes()).padStart(2, "0");
+            return mm + "-" + dd + " " + hh + ":" + mi;
+        };
+
+        const shortModel = (v) => {
+            if (!v) return "—";
+            const s = String(v);
+            return s.length > 14 ? s.slice(0, 13) + "…" : s;
+        };
+
+        const inputTotal = (r) =>
+            Number(r.input_uncached_tokens || 0) + Number(r.cache_read_tokens || 0);
+
+        function utcDayKey(at) {
+            if (!at) return "";
+            const d = new Date(at);
+            if (Number.isNaN(d.getTime())) return String(at).slice(0, 10);
+            return d.toISOString().slice(0, 10);
+        }
+
+        function rowIdentity(r) {
+            return [r.at, r.event, r.generation_id, r.conversation_id].join("|");
+        }
+
+        function buildDayCumulativeMap(rows) {
+            const sorted = rows.slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+            const running = {};
+            const map = new Map();
+            for (const r of sorted) {
+                const ev = r.event || "";
+                if (ev !== "agentTurn" && ev !== "hourly") continue;
+                const day = utcDayKey(r.at);
+                if (!running[day]) {
+                    running[day] = { cost_usd: 0, total_tokens: 0, output_tokens: 0 };
+                }
+                running[day].cost_usd += Number(r.cost_usd || 0);
+                running[day].total_tokens += Number(r.total_tokens || 0);
+                running[day].output_tokens += Number(r.output_tokens || 0);
+                map.set(rowIdentity(r), { ...running[day] });
+            }
+            return map;
+        }
+
+        function dayCumulativeForRow(r, dayMap) {
+            const hit = dayMap.get(rowIdentity(r));
+            if (hit) return hit;
+            return {
+                cost_usd: r.cumulative_cost_usd,
+                total_tokens: r.cumulative_total_tokens,
+                output_tokens: r.cumulative_output_tokens,
+            };
+        }
+
+        function totalsForUtcDay(rows, dayKey) {
+            let cost_usd = 0;
+            let total_tokens = 0;
+            let output_tokens = 0;
+            for (const r of rows) {
+                const ev = r.event || "";
+                if (ev !== "agentTurn" && ev !== "hourly") continue;
+                if (utcDayKey(r.at) !== dayKey) continue;
+                cost_usd += Number(r.cost_usd || 0);
+                total_tokens += Number(r.total_tokens || 0);
+                output_tokens += Number(r.output_tokens || 0);
+            }
+            return { cost_usd, total_tokens, output_tokens };
+        }
+
+        function tierUsdPerTurn(v) {
+            const c = Number(v);
+            if (!Number.isFinite(c) || c <= 0) return [];
+            if (c >= 0.2) return ["num-high", "cf-bg-hot"];
+            if (c >= 0.08) return ["num-warn", "cf-bg-warn"];
+            if (c >= 0.03) return ["num-mid", "cf-bg-mid"];
+            return [];
+        }
+
+        function tierUsdSession(v) {
+            const c = Number(v);
+            if (!Number.isFinite(c) || c <= 0) return [];
+            if (c >= 10) return ["num-high", "cf-bg-hot"];
+            if (c >= 3) return ["num-warn", "cf-bg-warn"];
+            if (c >= 1) return ["num-mid", "cf-bg-mid"];
+            return [];
+        }
+
+        function tierCtxPct(v) {
+            const p = Number(v);
+            if (!Number.isFinite(p) || p <= 0) return [];
+            if (p >= 90) return ["num-high", "cf-bg-hot"];
+            if (p >= 75) return ["num-warn", "cf-bg-warn"];
+            if (p >= 50) return ["num-mid", "cf-bg-mid"];
+            return [];
+        }
+
+        function tierTokenCount(v, warnAt, hotAt) {
+            const t = Number(v);
+            if (!Number.isFinite(t) || t <= 0) return [];
+            if (t >= hotAt) return ["num-high", "cf-bg-hot"];
+            if (t >= warnAt) return ["num-warn", "cf-bg-warn"];
+            return [];
+        }
+
+        function percentile(values, p) {
+            if (!values.length) return 0;
+            const sorted = values.slice().sort((a, b) => a - b);
+            const idx = Math.min(
+                sorted.length - 1,
+                Math.max(0, Math.floor(p * sorted.length))
+            );
+            return sorted[idx];
+        }
+
+        function relativeTier(value, values) {
+            const v = Number(value);
+            if (!Number.isFinite(v) || v <= 0 || values.length < 3) return [];
+            const p75 = percentile(values, 0.75);
+            const p90 = percentile(values, 0.9);
+            if (v >= p90 && p90 > 0) return ["cf-bg-hot"];
+            if (v >= p75 && p75 > 0) return ["cf-bg-warn"];
+            return [];
+        }
+
+        function cellClasses(key, r, stats) {
+            const classes = [];
+            if (key === "model") classes.push("model");
+
+            if (key === "cost_usd") classes.push(...tierUsdPerTurn(r.cost_usd));
+            if (key === "cumulative_cost_usd") {
+                const dc = r._dayCum || {};
+                classes.push(...tierUsdSession(dc.cost_usd ?? r.cumulative_cost_usd));
+            }
+            if (key === "context_usage_percent") {
+                classes.push(...tierCtxPct(r.context_usage_percent));
+            }
+            if (key === "total_tokens") {
+                classes.push(...tierTokenCount(r.total_tokens, 50000, 100000));
+                classes.push(...relativeTier(r.total_tokens, stats.totals));
+            }
+            if (key === "output_tokens") {
+                classes.push(...tierTokenCount(r.output_tokens, 8000, 20000));
+                classes.push(...relativeTier(r.output_tokens, stats.outputs));
+            }
+            if (key === "_in") {
+                classes.push(...relativeTier(inputTotal(r), stats.inputs));
+            }
+
+            return classes.filter(Boolean).join(" ");
+        }
+
+        function summaryClasses(label, rawValue) {
+            if (label === "Session $") return tierUsdSession(rawValue).join(" ");
+            if (label === "Last $") return tierUsdPerTurn(rawValue).join(" ");
+            if (label === "Ctx %") return tierCtxPct(rawValue).join(" ");
+            if (label === "Last total") return tierTokenCount(rawValue, 50000, 100000).join(" ");
+            return "";
+        }
+
+        function buildStats(list) {
+            return {
+                totals: list.map((r) => Number(r.total_tokens || 0)).filter((n) => n > 0),
+                outputs: list.map((r) => Number(r.output_tokens || 0)).filter((n) => n > 0),
+                inputs: list.map((r) => inputTotal(r)).filter((n) => n > 0),
+            };
+        }
+
+        const cols = [
+            ["at", "Time", (r) => shortAt(r.at), "left", "5.75rem"],
+            ["event", "Evt", (r) => {
+                const e = r.event || "";
+                if (e === "agentTurn") return "turn";
+                if (e === "hourly") return "hr";
+                if (e === "daily") return "day";
+                return e.slice(0, 6);
+            }, "left", "2.75rem"],
+            ["model", "Model", (r) => shortModel(r.model), "left", "4.5rem"],
+            ["_in", "In", (r) => fmtInt(inputTotal(r)), "right", "3.75rem"],
+            ["output_tokens", "Out", (r) => fmtInt(r.output_tokens), "right", "3.5rem"],
+            ["total_tokens", "Total", (r) => fmtInt(r.total_tokens), "right", "4rem"],
+            ["cost_usd", "Cost", (r) => fmtUsd(r.cost_usd), "right", "3.75rem"],
+            ["cumulative_cost_usd", "Cum $", (r) => fmtUsd(r.cumulative_cost_usd), "right", "3.75rem"],
+            ["context_usage_percent", "Ctx", (r) => fmtPct(r.context_usage_percent), "right", "3.25rem"],
+        ];
+
+        const COL_WIDTH = Object.fromEntries(cols.map((c) => [c[0], c[4]]));
+
+        const GITHUB_REPO = {
+            instawork: "Instawork/instawork",
+            finch: "Instawork/finch",
+        };
+
+        function githubPrUrl(repoKey, prNumber) {
+            const slug = GITHUB_REPO[String(repoKey || "").toLowerCase()];
+            if (!slug || !prNumber) return null;
+            return "https://github.com/" + slug + "/pull/" + prNumber;
+        }
+
+        function parseTaskLine(label) {
+            const raw = String(label || "").trim();
+            const prMatch = raw.match(/PR\s*#\s*(\d+)/i);
+            const prNumber = prMatch ? prMatch[1] : null;
+            const titleMatch = raw.match(/\*\*(.+?)\*\*/);
+            const title = titleMatch ? titleMatch[1].trim() : raw.replace(/\*\*/g, "").trim();
+            const repoMatch = raw.match(/`([a-zA-Z0-9_-]+)`/);
+            const repo = repoMatch ? repoMatch[1] : null;
+            const parts = raw.split(/\s+[—–-]\s+/);
+            let status = "";
+            let detail = "";
+            if (parts.length >= 2) {
+                status = parts[1].replace(/\*\*/g, "").trim();
+            }
+            if (parts.length >= 4) {
+                detail = parts.slice(3).join(" — ").trim();
+            } else if (parts.length === 3) {
+                detail = parts[2].replace(/`[^`]+`/g, "").trim();
+            }
+            const branchMatch = raw.match(/`([a-zA-Z0-9_/.-]+)`/g);
+            let branch = null;
+            if (branchMatch && branchMatch.length > 1) {
+                branch = branchMatch[1].replace(/`/g, "");
+            } else if (branchMatch && branchMatch.length === 1 && !repo) {
+                branch = branchMatch[0].replace(/`/g, "");
+            }
+            return { raw, title, status, repo, prNumber, branch, detail, prUrl: githubPrUrl(repo, prNumber) };
+        }
+
+        function sessionTurns(rows, conversationId) {
+            let turns = (rows || []).filter((r) => r.event === "agentTurn");
+            if (conversationId) {
+                const scoped = turns.filter((r) => r.conversation_id === conversationId);
+                if (scoped.length) turns = scoped;
+            }
+            return turns;
+        }
+
+        function sessionMetrics(rows, st) {
+            const conv = st && st.conversation_id;
+            const turns = sessionTurns(rows, conv);
+            if (!turns.length) {
+                return { last: null, summed: null, turnCount: 0, conversationId: conv || null };
+            }
+            const last = turns[turns.length - 1];
+            const summed = {
+                cost_usd: turns.reduce((s, r) => s + Number(r.cost_usd || 0), 0),
+                total_tokens: turns.reduce((s, r) => s + Number(r.total_tokens || 0), 0),
+                output_tokens: turns.reduce((s, r) => s + Number(r.output_tokens || 0), 0),
+            };
+            return {
+                last,
+                summed,
+                turnCount: turns.length,
+                conversationId: conv || last.conversation_id || null,
+            };
+        }
+
+        function rebuildHead() {
+            const head = document.getElementById("tableHead");
+            const colgroup = document.getElementById("tableCols");
+            head.replaceChildren();
+            colgroup.replaceChildren();
+            visibleCols().forEach(([key, label, , align]) => {
+                const col = document.createElement("col");
+                col.style.width = COL_WIDTH[key] || "4rem";
+                colgroup.appendChild(col);
+                const th = document.createElement("th");
+                th.textContent = label;
+                th.title = label;
+                if (align === "left") {
+                    th.classList.add("col-left");
+                }
+                th.onclick = () => {
+                    if (sortKey === key) sortDir *= -1;
+                    else {
+                        sortKey = key;
+                        sortDir = key === "at" ? -1 : 1;
+                    }
+                    renderAll();
+                };
+                if (sortKey === key) {
+                    th.textContent = label + (sortDir < 0 ? " ▾" : " ▴");
+                }
+                head.appendChild(th);
+            });
+        }
+
+        initColToggles();
+
+        function filteredRows() {
+            let list = (boot.rows || []).slice();
+            if (document.getElementById("granularOnly").checked) {
+                list = list.filter((r) => r.event === "agentTurn");
+            }
+            return list.sort((a, b) => {
+                if (sortKey === "_in") {
+                    return sortDir * (inputTotal(a) - inputTotal(b));
+                }
+                const av = a[sortKey], bv = b[sortKey];
+                if (sortKey === "at") return sortDir * String(av).localeCompare(String(bv));
+                if (sortKey === "model" || sortKey === "event") {
+                    return sortDir * String(av || "").localeCompare(String(bv || ""));
+                }
+                return sortDir * (Number(av || 0) - Number(bv || 0));
+            });
+        }
+
+
+        function buildTaskCard(todo) {
+            const parsed = parseTaskLine(todo.label);
+            const card = document.createElement("article");
+            card.className = "task-card" + (todo.done ? " done" : "");
+            const head = document.createElement("div");
+            head.className = "task-card-head";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = Boolean(todo.done);
+            cb.id = "todo-" + todo.id;
+            cb.setAttribute("aria-label", "Mark done: " + parsed.title);
+            cb.addEventListener("change", () => {
+                vscode.postMessage({
+                    type: "toggleTodo",
+                    id: todo.id,
+                    done: cb.checked,
+                });
+            });
+            const body = document.createElement("div");
+            body.className = "task-card-body";
+            body.addEventListener("click", (ev) => {
+                if (ev.target.closest("a")) return;
+                cb.checked = !cb.checked;
+                cb.dispatchEvent(new Event("change"));
+            });
+            const titleEl = document.createElement("div");
+            titleEl.className = "todo-title";
+            if (parsed.prUrl) {
+                const a = document.createElement("a");
+                a.href = parsed.prUrl;
+                a.textContent = parsed.title;
+                a.title = "Open PR #" + parsed.prNumber + " on GitHub";
+                titleEl.appendChild(a);
+            } else {
+                titleEl.textContent = parsed.title;
+            }
+            body.appendChild(titleEl);
+            const meta = document.createElement("div");
+            meta.className = "todo-meta";
+            if (parsed.status) {
+                const chip = document.createElement("span");
+                chip.className = "todo-chip";
+                chip.textContent = parsed.status;
+                meta.appendChild(chip);
+            }
+            if (parsed.repo) {
+                const chip = document.createElement("span");
+                chip.className = "todo-chip repo";
+                chip.textContent = parsed.repo;
+                meta.appendChild(chip);
+            }
+            if (parsed.prNumber) {
+                const chip = document.createElement("span");
+                chip.className = "todo-chip pr";
+                if (parsed.prUrl) {
+                    const a = document.createElement("a");
+                    a.href = parsed.prUrl;
+                    a.textContent = "#" + parsed.prNumber;
+                    chip.appendChild(a);
+                } else {
+                    chip.textContent = "#" + parsed.prNumber;
+                }
+                meta.appendChild(chip);
+            }
+            if (meta.childNodes.length) {
+                body.appendChild(meta);
+            }
+            if (parsed.detail) {
+                const detail = document.createElement("div");
+                detail.className = "todo-detail";
+                detail.textContent = parsed.detail;
+                body.appendChild(detail);
+            }
+            head.appendChild(cb);
+            head.appendChild(body);
+            card.appendChild(head);
+            return card;
+        }
+
+        function renderTasksHeader(activeTasks) {
+            const wrap = document.getElementById("tasksHeader");
+            const listEl = document.getElementById("tasksList");
+            const metaEl = document.getElementById("tasksMeta");
+            const todos = (activeTasks && activeTasks.todos) || [];
+            listEl.replaceChildren();
+            if (!todos.length) {
+                wrap.classList.add("empty");
+                metaEl.textContent = "";
+                return;
+            }
+            wrap.classList.remove("empty");
+            todos.forEach((todo) => {
+                listEl.appendChild(buildTaskCard(todo));
+            });
+            const parts = [];
+            const open = todos.filter((t) => !t.done).length;
+            parts.push(open + " open · " + todos.length + " total");
+            if (activeTasks.sessionId) {
+                parts.push("session " + String(activeTasks.sessionId).slice(0, 8));
+            }
+            if (activeTasks.updatedAt) {
+                parts.push("snap " + shortAt(activeTasks.updatedAt));
+            } else if (activeTasks.source) {
+                parts.push("from file");
+            }
+            metaEl.textContent = parts.join(" · ");
+        }
+
+        function renderSummary(st, metrics, list) {
+            const el = document.getElementById("summary");
+            el.replaceChildren();
+            const last = metrics.last;
+            const summed = metrics.summed;
+            const sessionCost = summed ? summed.cost_usd : (st.cumulative_cost_usd ?? last?.cumulative_cost_usd);
+            const sessionTok = summed ? summed.total_tokens : (st.cumulative_total_tokens ?? last?.cumulative_total_tokens);
+            const sessionOut = summed ? summed.output_tokens : (st.cumulative_output_tokens ?? last?.cumulative_output_tokens);
+            const ctx = last?.context_usage_percent;
+            const todayKey = utcDayKey(new Date().toISOString());
+            const dayTotals = totalsForUtcDay(rows, todayKey);
+            const items = [
+                ["Day $", fmtUsd(dayTotals.cost_usd)],
+                ["Chat $", fmtUsd(sessionCost)],
+                ["Chat tok", fmtInt(sessionTok)],
+                ["Out tok", fmtInt(sessionOut)],
+                ["Turns", fmtInt(metrics.turnCount)],
+                ["Last $", fmtUsd(last?.cost_usd)],
+                ["Last tok", fmtInt(last?.total_tokens)],
+                ["Ctx %", fmtPct(ctx)],
+            ];
+            items.forEach(([k, v]) => {
+                const dt = document.createElement("dt");
+                dt.textContent = k;
+                const dd = document.createElement("dd");
+                dd.textContent = v;
+                const raw =
+                    k === "Chat $" ? sessionCost :
+                        k === "Last $" ? last?.cost_usd :
+                            k === "Ctx %" ? ctx :
+                                k === "Last tok" ? last?.total_tokens : null;
+                if (raw != null) dd.className = summaryClasses(k === "Chat $" ? "Session $" : k, raw);
+                if (k === "Day $") dd.className = summaryClasses("Session $", dayTotals.cost_usd);
+                el.appendChild(dt);
+                el.appendChild(dd);
+            });
+            const conv = metrics.conversationId;
+            document.getElementById("meta").textContent =
+                list.length + " rows · " + metrics.turnCount + " turns" +
+                (conv ? " · " + String(conv).slice(0, 8) : "") +
+                " · " + shortAt(boot.generatedAt);
+        }
+
+        function renderAll() {
+            try {
+                document.getElementById("errorBanner").style.display = "none";
+                const st = boot.state || {}, rows = boot.rows || [];
+                const metrics = sessionMetrics(rows, st);
+                const list = filteredRows();
+                const dayMap = buildDayCumulativeMap(rows);
+                renderTasksHeader(boot.activeTasks);
+                renderSummary(st, metrics, rows);
+                rebuildHead();
+                const shown = visibleCols();
+                const body = document.getElementById("tableBody");
+                body.replaceChildren();
+                if (!list.length) {
+                    const tr = document.createElement("tr");
+                    const td = document.createElement("td");
+                    td.colSpan = Math.max(shown.length, 1);
+                    td.className = "empty-hint";
+                    td.textContent = rows.length
+                        ? "No rows match filter."
+                        : "No telemetry yet (complete an agent turn).";
+                    tr.appendChild(td);
+                    body.appendChild(tr);
+                } else {
+                    const stats = buildStats(list);
+                    list.forEach((r, idx) => {
+                        const tr = document.createElement("tr");
+                        const ev = r.event || "";
+                        tr.className = "event-" + ev;
+                        const isLatest =
+                            idx === 0 && sortKey === "at" && sortDir === -1 && ev === "agentTurn";
+                        if (isLatest) tr.classList.add("row-latest");
+                        const dayCum = dayCumulativeForRow(r, dayMap);
+                        const rowView = { ...r, _dayCum: dayCum };
+                        shown.forEach(([key, , fmt, align]) => {
+                            const td = document.createElement("td");
+                            if (key === "cumulative_cost_usd") {
+                                td.textContent = fmtUsd(dayCum.cost_usd);
+                            } else {
+                                td.textContent = fmt(rowView);
+                            }
+                            td.className = cellClasses(key, rowView, stats);
+                            if (align === "left") td.classList.add("col-left");
+                            tr.appendChild(td);
+                        });
+                        body.appendChild(tr);
+                    });
+                }
+            } catch (e) {
+                const b = document.getElementById("errorBanner");
+                b.style.display = "block";
+                b.textContent = String(e);
+            }
+        }
+
+        document.getElementById("reloadBtn").onclick = () => vscode.postMessage({ type: "refresh" });
+        document.getElementById("granularOnly").onchange = () => renderAll();
+        window.addEventListener("message", (e) => {
+            if (e.data && e.data.type === "update") {
+                boot = e.data.payload;
+                renderAll();
+            }
+        });
+        renderAll();
+    </script>
+</body>
+
+</html>

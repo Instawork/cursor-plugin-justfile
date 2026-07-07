@@ -1,0 +1,12 @@
+src/**
+tsconfig.json
+.gitignore
+**/*.map
+node_modules/**
+!node_modules/@cursor/**
+!node_modules/@bufbuild/**
+!node_modules/@connectrpc/**
+!node_modules/@statsig/**
+!node_modules/zod/**
+!node_modules/undici/**
+!node_modules/@fastify/**

@@ -1,0 +1,144 @@
+{
+  "name": "active-tasks",
+  "displayName": "Active Tasks",
+  "description": "Sidebar for active work (SQLite) with GitHub/cloud reconcile and PR CI status.",
+  "version": "0.3.6",
+  "publisher": "cursoractivetasks",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Instawork/cursor-plugins.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:activeTasks.panel",
+    "onCommand:activeTasks.open",
+    "onCommand:activeTasks.installHooks"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "activeTasks",
+          "title": "Active tasks",
+          "icon": {
+            "light": "media/icon-light.svg",
+            "dark": "media/icon-dark.svg"
+          }
+        }
+      ]
+    },
+    "views": {
+      "activeTasks": [
+        {
+          "type": "webview",
+          "id": "activeTasks.panel",
+          "name": "Active work"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "activeTasks.open",
+        "title": "Open Active Tasks",
+        "category": "Active Tasks",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "activeTasks.popOut",
+        "title": "Pop Out Active Tasks",
+        "category": "Active Tasks",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "activeTasks.installHooks",
+        "title": "Install Cursor Hooks",
+        "category": "Active Tasks",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "activeTasks.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "activeTasks.openDatabase",
+        "title": "Open Active Tasks Database",
+        "category": "Active Tasks"
+      },
+      {
+        "command": "activeTasks.setCloudApiKey",
+        "title": "Set Cloud Agents API Key",
+        "category": "Active Tasks"
+      },
+      {
+        "command": "activeTasks.clearCloudApiKey",
+        "title": "Clear Cloud Agents API Key",
+        "category": "Active Tasks"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "activeTasks.open",
+          "when": "true"
+        },
+        {
+          "command": "activeTasks.popOut",
+          "when": "true"
+        },
+        {
+          "command": "activeTasks.installHooks",
+          "when": "true"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "activeTasks.refresh",
+          "when": "view == activeTasks.panel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "activeTasks.popOut",
+          "when": "view == activeTasks.panel",
+          "group": "navigation@2"
+        },
+        {
+          "command": "activeTasks.installHooks",
+          "when": "view == activeTasks.panel",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "activeTasks.panel",
+        "contents": "Active work in `active-tasks.sqlite`. Reconcile PRs/cloud on refresh.\n[Install session hook](command:activeTasks.installHooks) · [Refresh](command:activeTasks.refresh)"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vsix": "npm run compile && vsce package --allow-missing-repository"
+  },
+  "dependencies": {
+    "@cursor/sdk": "^1.0.23",
+    "better-sqlite3": "^11.10.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.4.0"
+  }
+}

@@ -10,8 +10,8 @@ plugin name:
     npm run compile
     npm run vsix
     # Cursor CLI: use --install-extension (not `cursor extension  install`, which is a no-op on current builds).
-    EXT_ID="$(node -p 'require(\"./package.json\").publisher + \".\" + require(\"./package.json\").name')"
-    cursor --uninstall-extension "$EXT_ID"
+    EXT_ID="$(node -p 'require("./package.json").publisher + "." + require("./package.json").name')"
+    cursor --uninstall-extension "$EXT_ID" 2>/dev/null || true
     VSIX="$(pwd)/$(node -p 'require("./package.json").name + "-" + require("./package.json").version + ".vsix"')"
     cursor --install-extension "$VSIX" 
 
@@ -35,6 +35,14 @@ cursor-plugins:
     {{ just_executable() }} plugin explorer-assist
     {{ just_executable() }} plugin side-dock
     {{ just_executable() }} plugin search-workspace-settings
+    {{ just_executable() }} plugin token-telemetry
+    {{ just_executable() }} plugin active-tasks
 
 [group("cursor-plugins")]
 search-workspace-settings: (plugin "search-workspace-settings")
+
+[group("cursor-plugins")]
+token-telemetry: (plugin "token-telemetry")
+
+[group("cursor-plugins")]
+active-tasks: (plugin "active-tasks")

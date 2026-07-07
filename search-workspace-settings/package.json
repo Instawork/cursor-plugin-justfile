@@ -65,6 +65,20 @@
           "name": "Settings"
         }
       ]
+    },
+    "configuration": {
+      "title": "Search Workspace Settings",
+      "properties": {
+        "searchWorkspaceSettings.savedRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "window",
+          "description": "Paths remembered for root pills (written to workspace settings when a folder or workspace is open)."
+        }
+      }
     }
   },
   "scripts": {

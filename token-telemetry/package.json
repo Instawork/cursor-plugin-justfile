@@ -1,0 +1,231 @@
+{
+  "name": "token-telemetry",
+  "displayName": "Token Telemetry",
+  "description": "Sidebar panel for Cursor agent token usage (IDE hooks + cloud agent sync). Install hooks for IDE chat; set a Cloud API key to sync dashboard/API agents.",
+  "version": "0.7.2",
+  "publisher": "cursortokentel",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Instawork/cursor-plugins.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:tokenTelemetry.usagePanel",
+    "onCommand:tokenTelemetry.open",
+    "onCommand:tokenTelemetry.installHooks",
+    "onCommand:tokenTelemetry.syncCloudAgents"
+  ],
+  "dependencies": {
+    "@cursor/sdk": "^1.0.23"
+  },
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tokenTelemetry",
+          "title": "Cursor usage",
+          "icon": {
+            "light": "media/icon-light.svg",
+            "dark": "media/icon-dark.svg"
+          }
+        }
+      ]
+    },
+    "views": {
+      "tokenTelemetry": [
+        {
+          "type": "webview",
+          "id": "tokenTelemetry.usagePanel",
+          "name": "Cursor usage"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "tokenTelemetry.open",
+        "title": "Open Token Telemetry",
+        "category": "Token Telemetry",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "tokenTelemetry.openUsage",
+        "title": "Open Cursor Usage Panel",
+        "category": "Token Telemetry",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "tokenTelemetry.popOutUsage",
+        "title": "Pop Out Cursor Usage",
+        "category": "Token Telemetry",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "tokenTelemetry.installHooks",
+        "title": "Install Cursor Hooks",
+        "category": "Token Telemetry",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "tokenTelemetry.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "tokenTelemetry.syncCloudAgents",
+        "title": "Sync Cloud Agents",
+        "category": "Token Telemetry",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "tokenTelemetry.setCloudApiKey",
+        "title": "Set Cloud API Key",
+        "category": "Token Telemetry",
+        "icon": "$(key)"
+      },
+      {
+        "command": "tokenTelemetry.clearCloudApiKey",
+        "title": "Clear Cloud API Key",
+        "category": "Token Telemetry",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "tokenTelemetry.showLog",
+        "title": "Show Token Telemetry Log",
+        "category": "Token Telemetry",
+        "icon": "$(output)"
+      }
+    ],
+    "configuration": {
+      "title": "Token Telemetry",
+      "properties": {
+        "tokenTelemetry.cloudSync.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Periodically sync finished Cursor Cloud Agent runs into the SQLite ledger (and CSV when enabled)."
+        },
+        "tokenTelemetry.cloudSync.intervalMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "description": "Minutes between automatic cloud agent syncs."
+        },
+        "tokenTelemetry.cloudSync.lookbackDays": {
+          "type": "number",
+          "default": 14,
+          "minimum": 1,
+          "description": "How many days of cloud runs to scan when syncing."
+        },
+        "tokenTelemetry.cloudSync.maxIngestPerSync": {
+          "type": "number",
+          "default": 40,
+          "minimum": 1,
+          "description": "Maximum new cloud runs to ingest per sync (avoids long UI blocks)."
+        },
+        "tokenTelemetry.queryLimit": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 100,
+          "maximum": 50000,
+          "description": "Maximum per-turn rows loaded from SQLite into the usage panel."
+        },
+        "tokenTelemetry.dbQueryTimeoutSeconds": {
+          "type": "number",
+          "default": 120,
+          "minimum": 5,
+          "maximum": 600,
+          "description": "Timeout for Python SQLite query, migrate, and ingest subprocesses."
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "tokenTelemetry.open",
+          "when": "true"
+        },
+        {
+          "command": "tokenTelemetry.openUsage",
+          "when": "true"
+        },
+        {
+          "command": "tokenTelemetry.popOutUsage",
+          "when": "true"
+        },
+        {
+          "command": "tokenTelemetry.installHooks",
+          "when": "true"
+        },
+        {
+          "command": "tokenTelemetry.syncCloudAgents",
+          "when": "true"
+        },
+        {
+          "command": "tokenTelemetry.setCloudApiKey",
+          "when": "true"
+        },
+        {
+          "command": "tokenTelemetry.showLog",
+          "when": "true"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "tokenTelemetry.refresh",
+          "when": "view == tokenTelemetry.usagePanel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "tokenTelemetry.syncCloudAgents",
+          "when": "view == tokenTelemetry.usagePanel",
+          "group": "navigation@2"
+        },
+        {
+          "command": "tokenTelemetry.popOutUsage",
+          "when": "view == tokenTelemetry.usagePanel",
+          "group": "navigation@3"
+        },
+        {
+          "command": "tokenTelemetry.installHooks",
+          "when": "view == tokenTelemetry.usagePanel",
+          "group": "navigation@4"
+        },
+        {
+          "command": "tokenTelemetry.setCloudApiKey",
+          "when": "view == tokenTelemetry.usagePanel",
+          "group": "navigation@5"
+        },
+        {
+          "command": "tokenTelemetry.showLog",
+          "when": "view == tokenTelemetry.usagePanel",
+          "group": "navigation@6"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "tokenTelemetry.usagePanel",
+        "contents": "IDE usage: [Install Cursor hooks](command:tokenTelemetry.installHooks).\nCloud agents: [Set Cloud API key](command:tokenTelemetry.setCloudApiKey) then [Sync](command:tokenTelemetry.syncCloudAgents)."
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vsix": "npm run compile && vsce package --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.4.0"
+  }
+}

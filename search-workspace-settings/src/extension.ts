@@ -4,7 +4,9 @@ import { ACTIVITY_VIEW_ID, SearchSettingsActivityViewProvider, SearchSettingsPan
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new SearchSettingsActivityViewProvider(context.extensionUri);
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(ACTIVITY_VIEW_ID, provider),
+    vscode.window.registerWebviewViewProvider(ACTIVITY_VIEW_ID, provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
     vscode.commands.registerCommand("searchWorkspaceSettings.openPanel", () =>
       SearchSettingsPanel.show(context.extensionUri),
     ),
