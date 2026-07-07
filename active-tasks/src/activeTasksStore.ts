@@ -45,6 +45,25 @@ type DbRow = {
 
 let dbInstance: Database.Database | undefined;
 
+export function closeActiveTasksDb(): void {
+  if (dbInstance) {
+    try {
+      dbInstance.close();
+    } catch {
+      /* ignore */
+    }
+    dbInstance = undefined;
+  }
+}
+
+/** Re-run legacy TOML import when empty; returns row count after seed attempt. */
+export function seedActiveWorkIfEmpty(): number {
+  tryImportLegacyTomlIfEmpty();
+  closeActiveTasksDb();
+  openActiveTasksDb();
+  return loadTodosFromDb().length;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -182,6 +201,9 @@ export function listTagVocab(): string[] {
 }
 
 function tryImportLegacyTomlIfEmpty(): void {
+  if (process.env.ACTIVE_TASKS_SKIP_LEGACY_IMPORT === "1") {
+    return;
+  }
   const dbPath = activeTasksDbPath();
   if (fs.existsSync(dbPath)) {
     const probe = new Database(dbPath, { readonly: true });

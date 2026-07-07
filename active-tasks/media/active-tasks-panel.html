@@ -1402,6 +1402,49 @@
             color: var(--status-blocked-fg);
             border-color: color-mix(in srgb, var(--status-blocked-fg) 45%, var(--border));
         }
+
+        .panel-notice {
+            margin: 0 0 0.65rem;
+            padding: 0.55rem 0.65rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: color-mix(in srgb, var(--status-blocked-fg) 8%, var(--panel));
+            font-size: 0.88em;
+            line-height: 1.4;
+        }
+
+        .panel-notice.warn {
+            background: color-mix(in srgb, var(--status-review-fg) 10%, var(--panel));
+        }
+
+        .panel-notice strong {
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+
+        .panel-notice-detail {
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 0.82em;
+            word-break: break-word;
+        }
+
+        .panel-notice-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin-top: 0.45rem;
+        }
+
+        .panel-notice-actions button {
+            font: inherit;
+            font-size: 0.85em;
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            cursor: pointer;
+        }
     </style>
 </head>
 
@@ -1449,13 +1492,17 @@
         </form>
     </header>
     <main class="main" id="main">
+        <div id="panelNotice" class="panel-notice hidden" role="alert" aria-live="assertive"></div>
         <div class="empty hidden" id="emptyHint">
             <strong>Start tracking work</strong>
             <span>Type a title above to add your first task, or scan GitHub to import open PRs.</span>
             <div class="empty-actions">
                 <button type="button" class="primary" id="emptyReconcileBtn">Import from GitHub</button>
+                <button type="button" id="emptySyncBtn">Sync from TOML / DB</button>
                 <button type="button" id="emptyDbBtn">Open database</button>
             </div>
+            <p class="disc-hint hidden" id="emptyDbPath"></p>
+            <p class="disc-hint hidden" id="emptyLoadError"></p>
         </div>
         <div id="sectionsRoot"></div>
     </main>
@@ -1489,6 +1536,18 @@
         let searchText = "";
         let kbdFocusId = savedUi.kbdFocusId || null;
         let awaitingPayload = !savedUi.hasRendered;
+        setTimeout(() => {
+            if (awaitingPayload && !boot.generatedAt && !boot.notice && !boot.loadError) {
+                boot.notice = {
+                    level: "warn",
+                    title: "Extension is slow to respond",
+                    detail: "Try Refresh or Developer: Reload Window if the panel stays empty.",
+                    action: "retry",
+                };
+                renderPanelNotice();
+                scheduleRender();
+            }
+        }, 15000);
         let renderScheduled = false;
         let searchDebounce = null;
         const RECONCILE_CARD_CAP = 15;
@@ -1523,6 +1582,10 @@
 
         function todoMatchesWorkspace(todo) {
             if (!workspaceOnly) return true;
+            return taskAppliesToWorkspaceContext(todo);
+        }
+
+        function taskAppliesToWorkspaceContext(todo) {
             const ctx = (boot.discovery && boot.discovery.workspace) || {};
             if (!ctx.repoKey && !ctx.branch && !ctx.folder) return true;
             if (ctx.repoKey && todo.repo === ctx.repoKey) {
@@ -2917,9 +2980,81 @@
             document.getElementById("footMeta").textContent = parts.join(" · ");
         }
 
+        function renderPanelNotice() {
+            const el = document.getElementById("panelNotice");
+            const notice = boot.notice || (boot.loadError
+                ? { level: "error", title: "Database unavailable", detail: boot.loadError, action: "retry" }
+                : null);
+            if (!notice) {
+                el.classList.add("hidden");
+                el.replaceChildren();
+                return;
+            }
+            el.classList.remove("hidden");
+            el.classList.toggle("warn", notice.level === "warn");
+            el.replaceChildren();
+            const title = document.createElement("strong");
+            title.textContent = notice.title || "Something went wrong";
+            el.appendChild(title);
+            if (notice.detail) {
+                const detail = document.createElement("div");
+                detail.className = "panel-notice-detail";
+                detail.textContent = notice.detail;
+                el.appendChild(detail);
+            }
+            const actions = document.createElement("div");
+            actions.className = "panel-notice-actions";
+            if (notice.action === "retry" || notice.action === "sync") {
+                const retry = document.createElement("button");
+                retry.type = "button";
+                retry.textContent = notice.action === "sync" ? "Sync again" : "Retry";
+                retry.addEventListener("click", () => {
+                    if (notice.action === "sync") {
+                        vscode.postMessage({ type: "resyncDatabase" });
+                    } else {
+                        vscode.postMessage({ type: "refresh" });
+                    }
+                    document.getElementById("reloadBtn").classList.add("spinning");
+                });
+                actions.appendChild(retry);
+            }
+            if (notice.action === "openDb" || boot.loadError) {
+                const db = document.createElement("button");
+                db.type = "button";
+                db.textContent = "Open database";
+                db.addEventListener("click", () => vscode.postMessage({ type: "openDatabase" }));
+                actions.appendChild(db);
+            }
+            const dismiss = document.createElement("button");
+            dismiss.type = "button";
+            dismiss.textContent = "Dismiss";
+            dismiss.addEventListener("click", () => vscode.postMessage({ type: "dismissNotice" }));
+            actions.appendChild(dismiss);
+            el.appendChild(actions);
+        }
+
         function renderNow() {
+            renderPanelNotice();
             const activeTasks = boot.activeTasks || {};
-            let todos = activeTasks.todos || [];
+            const serverTodos = activeTasks.todos || [];
+            if (boot.loadError) {
+                document.getElementById("emptyLoadError").classList.add("hidden");
+            } else {
+                document.getElementById("emptyLoadError").classList.add("hidden");
+            }
+            if (activeTasks.source) {
+                const pathEl = document.getElementById("emptyDbPath");
+                pathEl.textContent = "Source: " + activeTasks.source;
+            }
+            if (
+                workspaceOnly &&
+                serverTodos.filter((t) => !t.done).length > 0 &&
+                serverTodos.filter((t) => !t.done && taskAppliesToWorkspaceContext(t)).length === 0
+            ) {
+                workspaceOnly = false;
+                saveUiState();
+            }
+            let todos = serverTodos;
             const q = searchText.trim().toLowerCase();
             if (q) {
                 todos = todos.filter((t) => todoMatchesSearch(t, q));
@@ -2980,6 +3115,7 @@
                         (disc.cloudAgents && disc.cloudAgents.length);
                     if (!hasDisc) {
                         empty.classList.remove("hidden");
+                        document.getElementById("emptyDbPath").classList.remove("hidden");
                     }
                 }
                 const disc = boot.discovery || {};
@@ -3072,6 +3208,10 @@
             invalidateAndRefresh();
         };
         document.getElementById("emptyDbBtn").onclick = () => vscode.postMessage({ type: "openDatabase" });
+        document.getElementById("emptySyncBtn").onclick = () => {
+            vscode.postMessage({ type: "resyncDatabase" });
+            document.getElementById("reloadBtn").classList.add("spinning");
+        };
 
         function invalidateAndRefresh() {
             document.getElementById("reloadBtn").classList.add("spinning");

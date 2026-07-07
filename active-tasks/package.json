@@ -2,7 +2,7 @@
   "name": "active-tasks",
   "displayName": "Active Tasks",
   "description": "Sidebar for active work (SQLite) with GitHub/cloud reconcile and PR CI status.",
-  "version": "0.3.9",
+  "version": "0.3.12",
   "publisher": "cursoractivetasks",
   "repository": {
     "type": "git",
@@ -143,7 +143,8 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "vsix": "npm run compile && node scripts/verify-smoke.mjs && vsce package --allow-missing-repository"
+    "vsix": "npm run compile && npm test && node scripts/verify-smoke.mjs && vsce package --allow-missing-repository",
+    "test": "npm run compile && node --test test/integration/*.mjs"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.23",

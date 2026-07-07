@@ -1,4 +1,5 @@
 import { Agent, type Run, type SDKAgentInfo } from "@cursor/sdk";
+import { cloudApiTimeoutMs, withTimeout } from "./ghExec";
 
 export type CloudAgentThread = {
   agentId: string;
@@ -13,6 +14,7 @@ export type CloudAgentThread = {
 
 const ACTIVE_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 const MAX_AGENTS = 40;
+const RUNS_TIMEOUT_MS = 8_000;
 
 function agentDashboardUrl(agentId: string): string {
   return `https://cursor.com/agents/${encodeURIComponent(agentId)}`;
@@ -54,6 +56,24 @@ async function listCloudAgents(apiKey: string): Promise<SDKAgentInfo[]> {
 export async function fetchCloudAgentThreads(
   apiKey: string
 ): Promise<{ items: CloudAgentThread[]; error: string | null }> {
+  try {
+    return await withTimeout(
+      "Cloud agents API",
+      cloudApiTimeoutMs(),
+      () => fetchCloudAgentThreadsInner(apiKey)
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      items: [],
+      error: msg.replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[redacted]"),
+    };
+  }
+}
+
+async function fetchCloudAgentThreadsInner(
+  apiKey: string
+): Promise<{ items: CloudAgentThread[]; error: string | null }> {
   const cutoff = Date.now() - ACTIVE_LOOKBACK_MS;
   try {
     const agents = await listCloudAgents(apiKey);
@@ -68,11 +88,13 @@ export async function fetchCloudAgentThreads(
 
       let latestRun: Run | undefined;
       try {
-        const page = await Agent.listRuns(agent.agentId, {
-          runtime: "cloud",
-          apiKey,
-          limit: 1,
-        });
+        const page = await withTimeout("Cloud agent runs", RUNS_TIMEOUT_MS, () =>
+          Agent.listRuns(agent.agentId, {
+            runtime: "cloud",
+            apiKey,
+            limit: 1,
+          })
+        );
         latestRun = page.items[0];
       } catch {
         /* skip run details */

@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { activeTasksDbPath, openActiveTasksDb } from "./activeTasksStore";
+import { activeTasksDbPath, openActiveTasksDb, seedActiveWorkIfEmpty } from "./activeTasksStore";
 import { clearCloudApiKey, setCloudApiKey } from "./cloudSecrets";
 import { invalidateTaskDiscoveryCache } from "./discovery";
 import { hooksInstalled, installHooks } from "./installHooks";
@@ -63,7 +63,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("activeTasks.refresh", () => {
       invalidateTaskDiscoveryCache();
-      host?.pushUpdate({ forceDiscovery: true });
+      if (seedActiveWorkIfEmpty() >= 0) {
+        host?.pushUpdate({ forceDiscovery: true });
+      }
     })
   );
 
@@ -178,6 +180,12 @@ export function activate(context: vscode.ExtensionContext): void {
   let dbReady = false;
   try {
     openActiveTasksDb();
+    const rowCount = seedActiveWorkIfEmpty();
+    if (rowCount === 0) {
+      void vscode.window.showWarningMessage(
+        `Active Tasks: no rows in ${activeTasksDbPath()}. Add tasks in the panel or restore active-tasks.toml, then use Refresh.`
+      );
+    }
     dbReady = true;
     watchActiveTasks(context);
   } catch (err) {
@@ -194,13 +202,11 @@ export function activate(context: vscode.ExtensionContext): void {
   }, 5 * 60 * 1000);
   context.subscriptions.push({ dispose: () => clearInterval(discoveryTimer) });
 
-  if (dbReady) {
-    try {
-      host?.pushUpdate({ forceDiscovery: true });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      void vscode.window.showErrorMessage(`Active Tasks failed to load: ${msg}`);
-    }
+  try {
+    host?.pushUpdate({ forceDiscovery: dbReady });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    void vscode.window.showErrorMessage(`Active Tasks failed to load: ${msg}`);
   }
 
   if (!hooksInstalled()) {

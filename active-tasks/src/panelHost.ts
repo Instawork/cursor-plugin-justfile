@@ -10,7 +10,7 @@ import {
   setTodoDonePersistent,
   updateTaskFields,
 } from "./activeTasks";
-import { activeTasksDbPath } from "./activeTasksStore";
+import { activeTasksDbPath, seedActiveWorkIfEmpty } from "./activeTasksStore";
 import type { TaskFieldUpdate } from "./taskModel";
 import { coerceOpenGitHubPr } from "./githubOpenPrs";
 import {
@@ -27,6 +27,11 @@ import {
   type ActiveTasksPayload,
 } from "./payload";
 import { enrichDiscoveryWithConsolidation } from "./workConsolidation";
+import {
+  discoveryWarnings,
+  formatPanelError,
+  type PanelNotice,
+} from "./panelNotice";
 import { detectWorkspaceMatch } from "./workspaceContext";
 
 const VIEW_ID = "activeTasks.panel";
@@ -45,6 +50,8 @@ function tasksTooltip(payload: ActiveTasksPayload): vscode.MarkdownString {
     md.appendMarkdown(
       `- Open: **${open}**\n- Done: **${done}**\n- Total: **${todos.length}**`
     );
+  } else if (payload.loadError) {
+    md.appendMarkdown(`- **Error:** ${payload.loadError}`);
   } else {
     md.appendMarkdown("- No active tasks loaded.");
   }
@@ -94,6 +101,8 @@ export class PanelHost {
   private refreshGen = 0;
   private pushTimer: NodeJS.Timeout | undefined;
   private pendingPush: { forceDiscovery?: boolean; skipDiscovery?: boolean } = {};
+  private lastPayload: ActiveTasksPayload | undefined;
+  private panelNotice: PanelNotice | null = null;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -173,6 +182,77 @@ export class PanelHost {
     );
   }
 
+  private finalizePayload(
+    base: ActiveTasksPayload,
+    workspace: ReturnType<PanelHost["workspaceContext"]>
+  ): ActiveTasksPayload {
+    const enriched = enrichDiscoveryWithConsolidation(
+      base.discovery,
+      base.activeTasks.todos
+    );
+    let notice: PanelNotice | null = base.notice ?? null;
+    if (base.loadError) {
+      notice = {
+        level: "error",
+        title: "Database unavailable",
+        detail: base.loadError,
+        action: "retry",
+      };
+    } else if (this.panelNotice) {
+      notice = this.panelNotice;
+    } else if (!notice) {
+      notice = discoveryWarnings({ ...base, discovery: enriched });
+    }
+    return {
+      ...base,
+      discovery: enriched,
+      notice,
+    };
+  }
+
+  private applyPayload(payload: ActiveTasksPayload): void {
+    this.post({ type: "update", payload });
+    this.statusBar.text = activeTasksStatusBarText(payload);
+    this.statusBar.tooltip = tasksTooltip(payload);
+    if (payload.loadError || payload.notice?.level === "error") {
+      this.statusBar.backgroundColor = new vscode.ThemeColor(
+        "statusBarItem.errorBackground"
+      );
+    } else {
+      this.statusBar.backgroundColor = new vscode.ThemeColor(
+        "statusBarItem.prominentBackground"
+      );
+    }
+    this.lastPayload = payload;
+  }
+
+  private setPanelError(
+    title: string,
+    err: unknown,
+    action?: PanelNotice["action"]
+  ): void {
+    this.panelNotice = {
+      level: "error",
+      title,
+      detail: formatPanelError(err),
+      action: action ?? "retry",
+    };
+  }
+
+  private clearPanelNotice(): void {
+    this.panelNotice = null;
+  }
+
+  private runPanelAction(title: string, fn: () => void): void {
+    try {
+      fn();
+      this.clearPanelNotice();
+    } catch (err) {
+      this.setPanelError(title, err);
+      this.pushUpdate({ skipDiscovery: true });
+    }
+  }
+
   pushUpdate(options?: {
     forceDiscovery?: boolean;
     skipDiscovery?: boolean;
@@ -199,43 +279,60 @@ export class PanelHost {
     skipDiscovery?: boolean;
   }): void {
     const workspace = this.workspaceContext();
-    let payload = loadActiveTasksPayload(workspace);
-    payload = {
-      ...payload,
-      discovery: enrichDiscoveryWithConsolidation(
-        payload.discovery,
-        payload.activeTasks.todos
-      ),
-    };
-    this.post({ type: "update", payload });
-    this.statusBar.text = activeTasksStatusBarText(payload);
-    this.statusBar.tooltip = tasksTooltip(payload);
+    try {
+      const payload = this.finalizePayload(
+        loadActiveTasksPayload(workspace),
+        workspace
+      );
+      this.applyPayload(payload);
 
-    if (options?.skipDiscovery && !options?.forceDiscovery) {
-      return;
-    }
-
-    const gen = ++this.refreshGen;
-    void loadTaskDiscovery(
-      this.context.secrets,
-      payload.activeTasks.todos,
-      workspace,
-      { force: options?.forceDiscovery }
-    ).then((discovery) => {
-      if (gen !== this.refreshGen) {
+      if (options?.skipDiscovery && !options?.forceDiscovery) {
         return;
       }
-      const next: ActiveTasksPayload = {
-        ...loadActiveTasksPayload(workspace),
-        discovery: enrichDiscoveryWithConsolidation(
-          discovery,
-          loadActiveTasksPayload(workspace).activeTasks.todos
-        ),
-      };
-      this.post({ type: "update", payload: next });
-      this.statusBar.text = activeTasksStatusBarText(next);
-      this.statusBar.tooltip = tasksTooltip(next);
-    });
+
+      const gen = ++this.refreshGen;
+      void loadTaskDiscovery(
+        this.context.secrets,
+        payload.activeTasks.todos,
+        workspace,
+        { force: options?.forceDiscovery }
+      )
+        .then((discovery) => {
+          if (gen !== this.refreshGen) {
+            return;
+          }
+          const next = this.finalizePayload(
+            {
+              ...loadActiveTasksPayload(workspace),
+              discovery,
+            },
+            workspace
+          );
+          this.applyPayload(next);
+        })
+        .catch((err) => {
+          if (gen !== this.refreshGen) {
+            return;
+          }
+          this.setPanelError("Discovery scan failed", err);
+          const next = this.finalizePayload(
+            loadActiveTasksPayload(workspace),
+            workspace
+          );
+          this.applyPayload(next);
+        });
+    } catch (err) {
+      this.setPanelError("Active Tasks failed to refresh", err);
+      this.applyPayload(
+        this.finalizePayload(loadActiveTasksPayload(workspace), workspace)
+      );
+    }
+  }
+
+  private deliverCachedPayload(webview: vscode.Webview): void {
+    if (this.lastPayload) {
+      void webview.postMessage({ type: "update", payload: this.lastPayload });
+    }
   }
 
   private post(message: { type: string; payload: ActiveTasksPayload }): void {
@@ -298,6 +395,19 @@ export class PanelHost {
           this.pushUpdate({ forceDiscovery: true });
           return;
         }
+        if (type === "resyncDatabase") {
+          this.runPanelAction("Sync from database failed", () => {
+            invalidateTaskDiscoveryCache();
+            seedActiveWorkIfEmpty();
+            this.pushUpdate({ forceDiscovery: true });
+          });
+          return;
+        }
+        if (type === "dismissNotice") {
+          this.clearPanelNotice();
+          this.pushUpdate({ skipDiscovery: true });
+          return;
+        }
         if (type === "popOut") {
           this.popOut();
           return;
@@ -336,9 +446,17 @@ export class PanelHost {
           msg.fields &&
           typeof msg.fields === "object"
         ) {
-          if (updateTaskFields(msg.id, msg.fields as TaskFieldUpdate)) {
+          this.runPanelAction("Save failed", () => {
+            const ok = updateTaskFields(
+              msg.id as string,
+              msg.fields as TaskFieldUpdate
+            );
+            if (!ok) {
+              throw new Error("Task row not found or invalid fields.");
+            }
+            invalidateTaskDiscoveryCache();
             this.pushUpdate({ forceDiscovery: true });
-          }
+          });
           return;
         }
         if (type === "reconcileAddPr" && msg.pr && typeof msg.pr === "object") {
@@ -413,12 +531,18 @@ export class PanelHost {
             typeof msg.status === "string" && msg.status.trim()
               ? msg.status.trim()
               : "in progress";
-          if (title) {
+          if (!title) {
+            return;
+          }
+          this.runPanelAction("Add task failed", () => {
             const ws = this.workspaceContext();
-            insertWorkFromQuickAdd(title, status, ws.repoKey ?? null);
+            const id = insertWorkFromQuickAdd(title, status, ws.repoKey ?? null);
+            if (!id) {
+              throw new Error("Could not insert task (empty title or status).");
+            }
             invalidateTaskDiscoveryCache();
             this.pushUpdate({ forceDiscovery: true });
-          }
+          });
           return;
         }
       });
@@ -436,5 +560,6 @@ export class PanelHost {
       this.htmlLoaded.add(webview);
       webview.html = fs.readFileSync(htmlPath.fsPath, "utf8");
     }
+    this.deliverCachedPayload(webview);
   }
 }

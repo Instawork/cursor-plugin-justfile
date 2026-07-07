@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { runGh } from "./ghExec";
 import { repoKeyFromNameWithOwner } from "./repoSlugs";
 
 export type OpenGitHubPr = {
@@ -67,28 +67,6 @@ type GhPrRow = {
   repository?: { nameWithOwner?: string };
 };
 
-function runGhSearch(args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("gh", args, { env: process.env });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (err) => reject(err));
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `gh exited ${code}`));
-        return;
-      }
-      resolve(stdout);
-    });
-  });
-}
-
 function parseRows(raw: string): GhPrRow[] {
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -144,8 +122,8 @@ export async function fetchOpenGitHubPrs(): Promise<{
   ];
   try {
     const [authoredRaw, reviewRaw] = await Promise.all([
-      runGhSearch([...base, "--author=@me"]),
-      runGhSearch([...base, "--review-requested=@me"]),
+      runGh([...base, "--author=@me"]),
+      runGh([...base, "--review-requested=@me"]),
     ]);
     const byUrl = new Map<string, OpenGitHubPr>();
     for (const row of parseRows(authoredRaw)) {

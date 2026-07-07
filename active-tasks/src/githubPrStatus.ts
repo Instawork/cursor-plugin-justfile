@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { runGh } from "./ghExec";
 import { GITHUB_NAME_WITH_OWNER } from "./repoSlugs";
 import type { ParsedSessionTodo as SessionTodo } from "./taskModel";
 
@@ -10,51 +10,6 @@ export type PrCheckSummary = {
   rollup: "SUCCESS" | "FAILURE" | "PENDING" | "UNKNOWN";
   fetchedAt: string;
 };
-
-const GH_TIMEOUT_MS = 25_000;
-
-function runGh(args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("gh", args, { env: process.env });
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      child.kill("SIGTERM");
-      reject(new Error("gh timed out"));
-    }, GH_TIMEOUT_MS);
-    child.stdout.on("data", (c: Buffer) => {
-      stdout += c.toString();
-    });
-    child.stderr.on("data", (c: Buffer) => {
-      stderr += c.toString();
-    });
-    child.on("error", (err) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on("close", (code) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `gh exited ${code}`));
-        return;
-      }
-      resolve(stdout);
-    });
-  });
-}
 
 function repoSlugForTodo(todo: SessionTodo): string | null {
   if (todo.repo && GITHUB_NAME_WITH_OWNER[todo.repo]) {
