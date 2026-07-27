@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GitHub PRs</title>
+    <link rel="stylesheet" href="popup.css" />
+</head>
+
+<body>
+    <header class="top">
+        <h1>GitHub PRs</h1>
+        <div class="actions">
+            <button type="button" id="refresh" title="Refresh">Refresh</button>
+            <button type="button" id="options-link" class="linkish" title="Settings">
+                Settings
+            </button>
+        </div>
+    </header>
+
+    <div id="message" class="message hidden" role="status"></div>
+
+    <section class="panel panel-pinned hidden" id="pinned-panel" aria-labelledby="pinned-heading">
+        <button type="button" class="section-head" id="pinned-toggle" aria-expanded="true" aria-controls="pinned-body">
+            <span class="chevron" aria-hidden="true">▼</span>
+            <span id="pinned-heading" class="section-title">Pinned</span>
+            <span class="section-count" id="pinned-count" aria-live="polite">0</span>
+        </button>
+        <div id="pinned-body" class="section-body">
+            <p id="pinned-empty" class="empty hidden">No pinned PRs. Use Pin on a card to keep it here.</p>
+        <ul id="pinned-list" class="pr-list pr-list-flat"></ul>
+        </div>
+    </section>
+
+    <section class="panel" aria-labelledby="mine-heading">
+        <button type="button" class="section-head" id="mine-toggle" aria-expanded="true" aria-controls="mine-body">
+            <span class="chevron" aria-hidden="true">▼</span>
+            <span id="mine-heading" class="section-title">My open PRs</span>
+            <span class="section-count" id="mine-count" aria-live="polite">0</span>
+        </button>
+        <div id="mine-body" class="section-body">
+            <p class="hint">
+                Dismiss hides a PR in this extension only (not on GitHub). Use Settings to clear dismissed
+                items.
+            </p>
+            <p id="mine-empty" class="empty hidden">No open pull requests authored by you.</p>
+            <div id="mine-list" class="pr-groups"></div>
+        </div>
+    </section>
+
+    <section class="panel" aria-labelledby="inbox-heading">
+        <button type="button" class="section-head" id="inbox-toggle" aria-expanded="true" aria-controls="inbox-body">
+            <span class="chevron" aria-hidden="true">▼</span>
+            <span id="inbox-heading" class="section-title">Review &amp; mentions</span>
+            <span class="section-count" id="inbox-count" aria-live="polite">0</span>
+        </button>
+        <div id="inbox-body" class="section-body">
+            <p class="hint">
+                PRs that request your review or mention you. Dismiss hides them here only (not on GitHub).
+            </p>
+            <p id="inbox-empty" class="empty hidden">Nothing here right now.</p>
+            <div id="inbox-list" class="pr-groups"></div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <a id="github-search" href="https://github.com/pulls" target="_blank" rel="noopener">View on GitHub</a>
+    </footer>
+
+    <script src="popup.js" type="module"></script>
+</body>
+
+</html>

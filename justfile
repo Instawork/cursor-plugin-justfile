@@ -37,6 +37,7 @@ cursor-plugins:
     {{ just_executable() }} plugin search-workspace-settings
     {{ just_executable() }} plugin token-telemetry
     {{ just_executable() }} plugin active-tasks
+    {{ just_executable() }} plugin workflow-studio
 
 [group("cursor-plugins")]
 search-workspace-settings: (plugin "search-workspace-settings")
@@ -46,3 +47,6 @@ token-telemetry: (plugin "token-telemetry")
 
 [group("cursor-plugins")]
 active-tasks: (plugin "active-tasks")
+
+[group("cursor-plugins")]
+workflow-studio: (plugin "workflow-studio")

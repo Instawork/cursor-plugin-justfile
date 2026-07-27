@@ -27,8 +27,7 @@ node_modules/**
 !node_modules/inherits/**
 !node_modules/ini/**
 !node_modules/mimic-response/**
-!node_modules/minimist/**
-!node_modules/mkdirp-classic/**
+ A AA!node_modules/mkdirp-classic/**
 !node_modules/napi-build-utils/**
 !node_modules/node-abi/**
 !node_modules/once/**

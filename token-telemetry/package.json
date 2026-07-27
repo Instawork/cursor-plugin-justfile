@@ -2,7 +2,7 @@
   "name": "token-telemetry",
   "displayName": "Token Telemetry",
   "description": "Sidebar panel for Cursor agent token usage (IDE hooks + cloud agent sync). Install hooks for IDE chat; set a Cloud API key to sync dashboard/API agents.",
-  "version": "0.7.2",
+  "version": "0.7.5",
   "publisher": "cursortokentel",
   "repository": {
     "type": "git",
@@ -220,7 +220,8 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "vsix": "npm run compile && vsce package --allow-missing-repository"
+    "test": "npm run compile && node --test test/modelPricing.mjs",
+    "vsix": "npm run compile && npm test && vsce package --allow-missing-repository"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

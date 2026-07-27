@@ -81,13 +81,16 @@ export class PanelHost {
   private statusBar: vscode.StatusBarItem;
   private loadGeneration = 0;
   private lastPayload: UsagePayload | null = null;
+  private lastStatusBarText: string | undefined;
+  private pushTimer: NodeJS.Timeout | undefined;
+  private pendingShowSync = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly cloudSyncStatus: () => CloudSyncStatus | null = () => null
   ) {
     this.statusBar = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Left,
+      vscode.StatusBarAlignment.Right,
       40
     );
     this.statusBar.name = "Token Telemetry Usage";
@@ -101,6 +104,10 @@ export class PanelHost {
   }
 
   dispose(): void {
+    if (this.pushTimer) {
+      clearTimeout(this.pushTimer);
+      this.pushTimer = undefined;
+    }
     this.statusBar.dispose();
     this.popout?.dispose();
     this.popout = undefined;
@@ -114,7 +121,7 @@ export class PanelHost {
         this.sidebar = undefined;
       }
     });
-    this.pushUpdate();
+    this.pushUpdate({ showSync: true });
   }
 
   popOut(): void {
@@ -141,13 +148,34 @@ export class PanelHost {
     this.pushUpdate();
   }
 
-  pushUpdate(): void {
-    void this.pushUpdateAsync();
+  pushUpdate(options?: { showSync?: boolean }): void {
+    if (options?.showSync) {
+      this.pendingShowSync = true;
+    }
+    if (this.pushTimer) {
+      return;
+    }
+    this.pushTimer = setTimeout(() => {
+      this.pushTimer = undefined;
+      const showSync = this.pendingShowSync;
+      this.pendingShowSync = false;
+      void this.pushUpdateAsync(showSync);
+    }, 280);
   }
 
-  private async pushUpdateAsync(): Promise<void> {
+  private applyStatusBar(payload: UsagePayload): void {
+    const text = usageStatusBarText(payload);
+    if (text === this.lastStatusBarText) {
+      return;
+    }
+    this.lastStatusBarText = text;
+    this.statusBar.text = text;
+    this.statusBar.tooltip = usageTooltip(payload);
+  }
+
+  private async pushUpdateAsync(showSync: boolean): Promise<void> {
     const gen = ++this.loadGeneration;
-    if (this.lastPayload) {
+    if (showSync && !this.lastPayload) {
       this.statusBar.text = "$(sync~) Usage…";
     }
     const { csvPath, statePath } = defaultPaths();
@@ -162,8 +190,7 @@ export class PanelHost {
       }
       this.lastPayload = payload;
       this.post({ type: "update", payload });
-      this.statusBar.text = usageStatusBarText(payload);
-      this.statusBar.tooltip = usageTooltip(payload);
+      this.applyStatusBar(payload);
     } catch (err) {
       if (gen !== this.loadGeneration) {
         return;
@@ -171,10 +198,13 @@ export class PanelHost {
       const msg = err instanceof Error ? err.message : String(err);
       logTelemetryError("Failed to load usage payload", msg);
       if (this.lastPayload) {
-        this.statusBar.text = usageStatusBarText(this.lastPayload);
-        this.statusBar.tooltip = usageTooltip(this.lastPayload);
+        this.applyStatusBar(this.lastPayload);
       } else {
-        this.statusBar.text = "$(error) Usage";
+        const text = "$(error) Usage";
+        if (text !== this.lastStatusBarText) {
+          this.lastStatusBarText = text;
+          this.statusBar.text = text;
+        }
       }
     }
   }
@@ -205,7 +235,7 @@ export class PanelHost {
             return;
           }
           if (msg.type === "refresh") {
-            this.pushUpdate();
+            this.pushUpdate({ showSync: true });
             return;
           }
           if (msg.type === "popOut") {

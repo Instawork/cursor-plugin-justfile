@@ -4,14 +4,18 @@ import * as path from "path";
 import * as vscode from "vscode";
 import {
   insertWorkFromQuickAdd,
+  moveTaskSibling,
+  moveTaskToSection,
+  nestTaskUnder,
   removeTaskRow,
   reorderTasks,
+  setTaskPinned,
   setTodoDone,
   setTodoDonePersistent,
   updateTaskFields,
 } from "./activeTasks";
 import { activeTasksDbPath, seedActiveWorkIfEmpty } from "./activeTasksStore";
-import type { TaskFieldUpdate } from "./taskModel";
+import type { TaskDragGroupSync, TaskFieldUpdate } from "./taskModel";
 import { coerceOpenGitHubPr } from "./githubOpenPrs";
 import {
   invalidateTaskDiscoveryCache,
@@ -21,9 +25,11 @@ import {
   reconcileDismissItem,
   reconcileMergeWorkRows,
 } from "./discovery";
+import { resetReconcileFeedBaseline } from "./reconcileFeed";
 import {
   activeTasksStatusBarText,
   loadActiveTasksPayload,
+  reconcileExtraWithScanHold,
   type ActiveTasksPayload,
 } from "./payload";
 import { enrichDiscoveryWithConsolidation } from "./workConsolidation";
@@ -37,6 +43,28 @@ import { detectWorkspaceMatch } from "./workspaceContext";
 const VIEW_ID = "activeTasks.panel";
 const HTML_FILE = "active-tasks-panel.html";
 const POPOUT_TITLE = "Active tasks";
+
+function parseDragGroupSync(raw: unknown): TaskDragGroupSync | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const o = raw as Record<string, unknown>;
+  const sync: TaskDragGroupSync = {};
+  if ("repo" in o) {
+    if (o.repo === null) {
+      sync.repo = null;
+    } else if (typeof o.repo === "string") {
+      sync.repo = o.repo;
+    }
+  }
+  if (typeof o.status === "string") {
+    sync.status = o.status;
+  }
+  if (typeof o.status_key === "string") {
+    sync.status_key = o.status_key as TaskDragGroupSync["status_key"];
+  }
+  return Object.keys(sync).length ? sync : undefined;
+}
 
 function tasksTooltip(payload: ActiveTasksPayload): vscode.MarkdownString {
   const md = new vscode.MarkdownString(undefined, true);
@@ -103,13 +131,17 @@ export class PanelHost {
   private pendingPush: { forceDiscovery?: boolean; skipDiscovery?: boolean } = {};
   private lastPayload: ActiveTasksPayload | undefined;
   private panelNotice: PanelNotice | null = null;
+  private lastStatusBarText: string | undefined;
+  private lastStatusBarErrorBg: boolean | undefined;
+  private statusBarHoldTimer: NodeJS.Timeout | undefined;
+  private discoveryScanPending = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly context: vscode.ExtensionContext
   ) {
     this.statusBar = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Left,
+      vscode.StatusBarAlignment.Right,
       39
     );
     this.statusBar.name = "Active Tasks";
@@ -123,6 +155,10 @@ export class PanelHost {
   }
 
   dispose(): void {
+    if (this.statusBarHoldTimer) {
+      clearTimeout(this.statusBarHoldTimer);
+      this.statusBarHoldTimer = undefined;
+    }
     this.statusBar.dispose();
     this.popout?.dispose();
     this.popout = undefined;
@@ -210,11 +246,32 @@ export class PanelHost {
     };
   }
 
-  private applyPayload(payload: ActiveTasksPayload): void {
-    this.post({ type: "update", payload });
-    this.statusBar.text = activeTasksStatusBarText(payload);
-    this.statusBar.tooltip = tasksTooltip(payload);
-    if (payload.loadError || payload.notice?.level === "error") {
+  /** Avoid flashing "+N reconcile" while discovery cache is empty mid-scan. */
+  private reconcileExtraForStatusBar(payload: ActiveTasksPayload): number {
+    return reconcileExtraWithScanHold(
+      payload.discovery,
+      this.discoveryScanPending,
+      this.lastPayload?.discovery
+    );
+  }
+
+  private applyStatusBar(payload: ActiveTasksPayload): void {
+    const text = activeTasksStatusBarText(payload, {
+      reconcileExtra: this.reconcileExtraForStatusBar(payload),
+    });
+    const errorBg = Boolean(
+      payload.loadError || payload.notice?.level === "error"
+    );
+    if (
+      text === this.lastStatusBarText &&
+      errorBg === this.lastStatusBarErrorBg
+    ) {
+      return;
+    }
+    this.lastStatusBarText = text;
+    this.lastStatusBarErrorBg = errorBg;
+    this.statusBar.text = text;
+    if (errorBg) {
       this.statusBar.backgroundColor = new vscode.ThemeColor(
         "statusBarItem.errorBackground"
       );
@@ -223,6 +280,12 @@ export class PanelHost {
         "statusBarItem.prominentBackground"
       );
     }
+    this.statusBar.tooltip = tasksTooltip(payload);
+  }
+
+  private applyPayload(payload: ActiveTasksPayload): void {
+    this.post({ type: "update", payload });
+    this.applyStatusBar(payload);
     this.lastPayload = payload;
   }
 
@@ -271,7 +334,7 @@ export class PanelHost {
       const opts = this.pendingPush;
       this.pendingPush = {};
       this.flushPushUpdate(opts);
-    }, 120);
+    }, 280);
   }
 
   private flushPushUpdate(options?: {
@@ -279,18 +342,33 @@ export class PanelHost {
     skipDiscovery?: boolean;
   }): void {
     const workspace = this.workspaceContext();
+    const willRunDiscovery = !(
+      options?.skipDiscovery && !options?.forceDiscovery
+    );
     try {
+      if (willRunDiscovery) {
+        this.discoveryScanPending = true;
+        if (this.statusBarHoldTimer) {
+          clearTimeout(this.statusBarHoldTimer);
+        }
+        this.statusBarHoldTimer = setTimeout(() => {
+          this.discoveryScanPending = false;
+          this.statusBarHoldTimer = undefined;
+        }, 45_000);
+      }
+
       const payload = this.finalizePayload(
         loadActiveTasksPayload(workspace),
         workspace
       );
       this.applyPayload(payload);
 
-      if (options?.skipDiscovery && !options?.forceDiscovery) {
+      if (!willRunDiscovery) {
         return;
       }
 
       const gen = ++this.refreshGen;
+
       void loadTaskDiscovery(
         this.context.secrets,
         payload.activeTasks.todos,
@@ -301,6 +379,11 @@ export class PanelHost {
           if (gen !== this.refreshGen) {
             return;
           }
+          if (this.statusBarHoldTimer) {
+            clearTimeout(this.statusBarHoldTimer);
+            this.statusBarHoldTimer = undefined;
+          }
+          this.discoveryScanPending = false;
           const next = this.finalizePayload(
             {
               ...loadActiveTasksPayload(workspace),
@@ -314,6 +397,11 @@ export class PanelHost {
           if (gen !== this.refreshGen) {
             return;
           }
+          if (this.statusBarHoldTimer) {
+            clearTimeout(this.statusBarHoldTimer);
+            this.statusBarHoldTimer = undefined;
+          }
+          this.discoveryScanPending = false;
           this.setPanelError("Discovery scan failed", err);
           const next = this.finalizePayload(
             loadActiveTasksPayload(workspace),
@@ -395,6 +483,35 @@ export class PanelHost {
           this.pushUpdate({ forceDiscovery: true });
           return;
         }
+        if (type === "reconcileResetBaseline") {
+          resetReconcileFeedBaseline();
+          invalidateTaskDiscoveryCache();
+          this.pushUpdate({ forceDiscovery: true });
+          return;
+        }
+        if (type === "reconcileSetBackfill" && typeof msg.enabled === "boolean") {
+          void vscode.workspace
+            .getConfiguration("activeTasks")
+            .update(
+              "reconcile.backfill",
+              msg.enabled,
+              vscode.ConfigurationTarget.Global
+            );
+          return;
+        }
+        if (
+          type === "reconcileSetIncludeReview" &&
+          typeof msg.enabled === "boolean"
+        ) {
+          void vscode.workspace
+            .getConfiguration("activeTasks")
+            .update(
+              "reconcile.includeReviewRequested",
+              msg.enabled,
+              vscode.ConfigurationTarget.Global
+            );
+          return;
+        }
         if (type === "resyncDatabase") {
           this.runPanelAction("Sync from database failed", () => {
             invalidateTaskDiscoveryCache();
@@ -438,6 +555,79 @@ export class PanelHost {
             reorderTasks(ids);
             this.pushUpdate({ skipDiscovery: true });
           }
+          return;
+        }
+        if (
+          type === "nestTask" &&
+          typeof msg.childId === "string" &&
+          typeof msg.parentId === "string"
+        ) {
+          this.runPanelAction("Nest failed", () => {
+            const ok = nestTaskUnder(
+              msg.childId as string,
+              msg.parentId as string,
+              parseDragGroupSync(msg.groupSync)
+            );
+            if (!ok) {
+              throw new Error(
+                "Could not nest task (cycle, missing row, or done task)."
+              );
+            }
+            this.pushUpdate({ skipDiscovery: true });
+          });
+          return;
+        }
+        if (
+          type === "moveTaskSibling" &&
+          typeof msg.childId === "string" &&
+          typeof msg.targetId === "string" &&
+          typeof msg.after === "boolean"
+        ) {
+          this.runPanelAction("Move failed", () => {
+            const ok = moveTaskSibling(
+              msg.childId as string,
+              msg.targetId as string,
+              msg.after as boolean,
+              parseDragGroupSync(msg.groupSync)
+            );
+            if (!ok) {
+              throw new Error("Could not move task.");
+            }
+            this.pushUpdate({ skipDiscovery: true });
+          });
+          return;
+        }
+        if (
+          type === "moveTaskToSection" &&
+          typeof msg.childId === "string" &&
+          msg.groupSync &&
+          typeof msg.groupSync === "object"
+        ) {
+          const groupSync = parseDragGroupSync(msg.groupSync);
+          if (!groupSync) {
+            return;
+          }
+          this.runPanelAction("Move failed", () => {
+            const ok = moveTaskToSection(msg.childId as string, groupSync);
+            if (!ok) {
+              throw new Error("Could not move task to section.");
+            }
+            this.pushUpdate({ skipDiscovery: true });
+          });
+          return;
+        }
+        if (
+          type === "setPinned" &&
+          typeof msg.id === "string" &&
+          typeof msg.pinned === "boolean"
+        ) {
+          this.runPanelAction("Pin failed", () => {
+            const ok = setTaskPinned(msg.id as string, msg.pinned as boolean);
+            if (!ok) {
+              throw new Error("Could not pin task (missing row or already done).");
+            }
+            this.pushUpdate({ skipDiscovery: true });
+          });
           return;
         }
         if (
@@ -515,14 +705,24 @@ export class PanelHost {
           typeof msg.primaryId === "string" &&
           Array.isArray(msg.mergeIds)
         ) {
-          const mergeIds = msg.mergeIds.filter(
-            (x): x is string => typeof x === "string"
-          );
-          if (mergeIds.length) {
-            reconcileMergeWorkRows(msg.primaryId.trim(), mergeIds);
+          const primaryId = msg.primaryId.trim();
+          const mergeIds = msg.mergeIds
+            .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+            .map((x) => x.trim())
+            .filter((id) => id !== primaryId);
+          if (!mergeIds.length) {
+            return;
+          }
+          this.runPanelAction("Nest failed", () => {
+            const ok = reconcileMergeWorkRows(primaryId, mergeIds);
+            if (!ok) {
+              throw new Error(
+                "Could not nest tasks (missing row, cycle, or invalid selection)."
+              );
+            }
             invalidateTaskDiscoveryCache();
             this.pushUpdate({ forceDiscovery: true });
-          }
+          });
           return;
         }
         if (type === "quickAddWork" && typeof msg.title === "string") {

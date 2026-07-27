@@ -79,7 +79,8 @@
             }
         }
 
-        #reloadBtn.spinning {
+        #reloadBtn.spinning,
+        #reconcileRefreshBtn.spinning {
             animation: spin 0.8s linear infinite;
         }
 
@@ -354,6 +355,54 @@
 
         .reconcile-details[open] summary::before {
             transform: rotate(90deg);
+        }
+
+        .reconcile-dock {
+            margin-top: 1rem;
+            padding-top: 0.65rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .reconcile-dock .section {
+            margin-bottom: 0;
+        }
+
+        .reconcile-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin: 0 0 0.55rem;
+        }
+
+        .reconcile-toolbar button {
+            font: inherit;
+            font-size: 0.82em;
+            padding: 0.25rem 0.55rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            cursor: pointer;
+            color: inherit;
+        }
+
+        .reconcile-toolbar button:hover {
+            border-color: var(--accent);
+        }
+
+        .reconcile-toolbar button.primary {
+            background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+        }
+
+        .reconcile-toolbar button.active {
+            background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+
+        .reconcile-toolbar button:disabled {
+            opacity: 0.65;
+            cursor: wait;
         }
 
         .status-eyebrow {
@@ -699,6 +748,237 @@
             background: var(--status-progress-bg);
         }
 
+        .ci-dot {
+            width: .55rem;
+            height: .55rem;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: .32rem;
+            border: 1px solid transparent;
+        }
+
+        .ci-dot.success {
+            background: var(--status-ready-fg);
+            box-shadow: 0 0 0 2px var(--status-ready-bg);
+        }
+
+        .ci-dot.failure {
+            background: var(--status-blocked-fg);
+            box-shadow: 0 0 0 2px var(--status-blocked-bg);
+        }
+
+        .ci-dot.pending {
+            background: var(--status-progress-fg);
+            box-shadow: 0 0 0 2px var(--status-progress-bg);
+        }
+
+        .ci-dot.unknown {
+            background: var(--muted);
+            opacity: .6;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            font-size: .68rem;
+            font-weight: 750;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            border-radius: 999px;
+            padding: .1rem .42rem;
+            border: 1px solid transparent;
+            flex-shrink: 0;
+        }
+
+        .status-pill.tone-blocked {
+            color: var(--status-blocked-fg);
+            background: var(--status-blocked-bg);
+            border-color: color-mix(in srgb, var(--status-blocked-fg) 35%, transparent);
+        }
+
+        .status-pill.tone-review {
+            color: var(--status-review-fg);
+            background: var(--status-review-bg);
+            border-color: color-mix(in srgb, var(--status-review-fg) 35%, transparent);
+        }
+
+        .status-pill.tone-progress {
+            color: var(--status-progress-fg);
+            background: var(--status-progress-bg);
+            border-color: color-mix(in srgb, var(--status-progress-fg) 35%, transparent);
+        }
+
+        .status-pill.tone-ready {
+            color: var(--status-ready-fg);
+            background: var(--status-ready-bg);
+            border-color: color-mix(in srgb, var(--status-ready-fg) 35%, transparent);
+        }
+
+        .status-pill.tone-paused,
+        .status-pill.tone-default,
+        .status-pill.tone-other {
+            color: var(--muted);
+            background: var(--status-paused-bg);
+        }
+
+        .todo-next-action {
+            margin-top: .28rem;
+            font-size: .82em;
+            color: var(--muted);
+            line-height: 1.35;
+        }
+
+        .todo-next-action::before {
+            content: "→ ";
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .here-pill {
+            font-size: .65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            border-radius: 999px;
+            padding: .06rem .38rem;
+            border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+            color: var(--accent);
+            background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+            flex-shrink: 0;
+            margin-top: .18rem;
+        }
+
+        .pin-indicator {
+            font-size: .75rem;
+            opacity: .75;
+            flex-shrink: 0;
+            margin-top: .2rem;
+        }
+
+        .card-pin-btn {
+            flex-shrink: 0;
+            align-self: flex-start;
+            margin-top: .05rem;
+            width: 1.35rem;
+            height: 1.35rem;
+            padding: 0;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg);
+            color: var(--muted);
+            font-size: .78rem;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-pin-btn:hover {
+            color: var(--ink);
+            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+        }
+
+        .card-pin-btn.is-pinned {
+            color: var(--accent);
+            border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+            background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+        }
+
+        .task-card.pinned {
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+        }
+
+        .task-card.done .todo-chip.tag {
+            opacity: .55;
+        }
+
+        .merge-into-panel {
+            margin-top: .65rem;
+            padding-top: .55rem;
+            border-top: 1px dashed var(--border);
+        }
+
+        .merge-into-panel .field-label {
+            display: block;
+            font-size: .72rem;
+            font-weight: 650;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: var(--muted);
+            margin-bottom: .35rem;
+        }
+
+        .merge-candidate-list {
+            display: flex;
+            flex-direction: column;
+            gap: .28rem;
+            max-height: 9rem;
+            overflow-y: auto;
+            margin-bottom: .45rem;
+        }
+
+        .merge-candidate {
+            display: flex;
+            align-items: flex-start;
+            gap: .4rem;
+            font-size: .88em;
+            line-height: 1.35;
+            cursor: pointer;
+        }
+
+        .merge-candidate input {
+            margin-top: .2rem;
+            flex-shrink: 0;
+        }
+
+        .merge-modal-list {
+            max-height: 14rem;
+            overflow-y: auto;
+            margin: .5rem 0 .65rem;
+            display: flex;
+            flex-direction: column;
+            gap: .35rem;
+        }
+
+        .merge-modal-list label {
+            display: flex;
+            align-items: flex-start;
+            gap: .45rem;
+            font-size: .92em;
+            line-height: 1.35;
+            cursor: pointer;
+        }
+
+        .merge-modal-list input[type="radio"],
+        .merge-modal-list input[type="checkbox"] {
+            margin-top: .22rem;
+            flex-shrink: 0;
+        }
+
+        .merge-modal-primary {
+            margin-bottom: .35rem;
+        }
+
+        .merge-modal-primary select {
+            width: 100%;
+            font: inherit;
+            font-size: .92em;
+            padding: .35rem .45rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--panel);
+            color: var(--ink);
+        }
+
+        .meta-row-secondary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .28rem .35rem;
+            margin-top: .32rem;
+            align-items: center;
+        }
+
         .modal-actions.stack {
             flex-direction: column;
             align-items: stretch;
@@ -755,6 +1035,29 @@
 
         .task-card.drop-after::after {
             bottom: -.24rem;
+        }
+
+        .task-card.drop-nest {
+            box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+            background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+        }
+
+        .task-nest {
+            display: flex;
+            flex-direction: column;
+            gap: .35rem;
+            margin: .4rem 0 0 1.1rem;
+            padding-left: .55rem;
+            border-left: 2px solid color-mix(in srgb, var(--border) 85%, var(--accent));
+        }
+
+        .task-nest .task-card {
+            box-shadow: none;
+        }
+
+        .section.section-drop-target .section-head {
+            box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+            border-radius: var(--radius);
         }
 
         .task-card.done {
@@ -1113,6 +1416,22 @@
             opacity: .7;
         }
 
+        .todo-tag-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.28rem;
+            margin-top: 0.32rem;
+            align-items: center;
+        }
+
+        .todo-chip.tag {
+            font-weight: 650;
+            font-size: 0.74em;
+            background: color-mix(in srgb, var(--tag-accent) 22%, var(--panel));
+            color: var(--tag-accent);
+            border: 1px solid color-mix(in srgb, var(--tag-accent) 44%, transparent);
+        }
+
         .todo-detail {
             margin-top: .42rem;
             font-size: .86em;
@@ -1275,15 +1594,15 @@
             font-size: 0.78rem;
             padding: 0.15rem 0.45rem;
             border-radius: 999px;
-            border: 1px solid var(--border);
-            background: var(--panel);
-            color: var(--ink);
+            border: 1px solid color-mix(in srgb, var(--tag-accent) 44%, transparent);
+            background: color-mix(in srgb, var(--tag-accent) 22%, var(--panel));
+            color: var(--tag-accent);
             cursor: pointer;
         }
 
         .tag-chip.on {
-            border-color: var(--accent);
-            background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+            background: color-mix(in srgb, var(--tag-accent) 32%, var(--panel));
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag-accent) 55%, transparent);
         }
 
         .tag-chip-display {
@@ -1468,9 +1787,10 @@
                 <button type="button" data-filter="done" role="tab">Done</button>
             </div>
             <div class="toolbar-actions">
+                <button type="button" class="ghost" id="mergeTasksBtn" title="Nest tasks under one initiative" aria-label="Nest tasks">⧉</button>
                 <button type="button" class="ghost" id="groupToggle" title="Group: List" aria-label="Change list grouping">⫶</button>
                 <button type="button" class="ghost" id="dbBtn" title="Open database" aria-label="Open database">Db</button>
-                <button type="button" class="ghost" id="reloadBtn" title="Refresh scan" aria-label="Refresh">↻</button>
+                <button type="button" class="ghost" id="reloadBtn" title="Refresh tasks and reconcile scan" aria-label="Refresh">↻</button>
                 <button type="button" class="ghost" id="popOutBtn" title="Pop out panel" aria-label="Pop out">⤢</button>
             </div>
         </div>
@@ -1505,6 +1825,7 @@
             <p class="disc-hint hidden" id="emptyLoadError"></p>
         </div>
         <div id="sectionsRoot"></div>
+        <div id="reconcileDock" class="reconcile-dock" aria-label="Reconcile"></div>
     </main>
     <footer class="foot" id="foot">
         <div id="footMeta"></div>
@@ -1518,6 +1839,24 @@
                 <button type="button" id="doneSessionBtn">Hide until refresh</button>
                 <button type="button" class="danger" id="doneRemoveBtn">Delete permanently</button>
                 <button type="button" id="doneUndoBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop hidden" id="mergeModal" role="dialog" aria-modal="true" aria-labelledby="mergeModalTitle">
+        <div class="modal-card" style="width: min(26rem, 100%);">
+            <h3 id="mergeModalTitle">Nest tasks</h3>
+            <p id="mergeModalHint" class="disc-hint" style="margin-bottom: 0.35rem;">
+                Combine related rows under one initiative. Selected tasks become nested subtasks; each keeps its own PRs, tags, and notes.
+            </p>
+            <div class="merge-modal-primary">
+                <label for="mergePrimarySelect" class="field-label" style="margin-bottom: 0.25rem;">Parent task</label>
+                <select id="mergePrimarySelect" aria-label="Parent task"></select>
+            </div>
+            <p class="field-label" style="margin: 0.5rem 0 0.25rem;">Nest under it</p>
+            <div class="merge-modal-list" id="mergeSourceList"></div>
+            <div class="modal-actions">
+                <button type="button" class="primary" id="mergeConfirmBtn">Nest</button>
+                <button type="button" id="mergeCancelBtn">Cancel</button>
             </div>
         </div>
     </div>
@@ -1551,6 +1890,30 @@
         let renderScheduled = false;
         let searchDebounce = null;
         const RECONCILE_CARD_CAP = 15;
+        let refreshSpinTimer = null;
+
+        function setRefreshSpinning(on) {
+            const ids = ["reloadBtn", "reconcileRefreshBtn"];
+            ids.forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.classList.toggle("spinning", on);
+                    el.disabled = on;
+                }
+            });
+            if (refreshSpinTimer) {
+                clearTimeout(refreshSpinTimer);
+                refreshSpinTimer = null;
+            }
+            if (on) {
+                refreshSpinTimer = setTimeout(() => setRefreshSpinning(false), 45000);
+            }
+        }
+
+        function requestRefresh() {
+            setRefreshSpinning(true);
+            vscode.postMessage({ type: "refresh" });
+        }
 
         function scheduleRender() {
             if (renderScheduled) {
@@ -1686,6 +2049,142 @@
         };
         const REPO_ORDER = ["instawork", "finch", "infrastructure"];
 
+        /** Keep palette / overrides in sync with src/tagsUtil.ts */
+        const TAG_PALETTE = [
+            "#2563eb", "#0d9488", "#7c3aed", "#c026d3", "#ea580c",
+            "#ca8a04", "#059669", "#dc2626", "#0891b2", "#4f46e5",
+        ];
+        const TAG_ACCENT_OVERRIDES = {
+            cursor: "#6366f1",
+            datadog: "#632CA6",
+            deploy: "#ea580c",
+            finch: "#0d9488",
+            infrastructure: "#7c3aed",
+            instawork: "#2563eb",
+            release: "#ca8a04",
+            sentry: "#6C5FC7",
+            sre: "#774AA4",
+        };
+
+        function hashTagKey(key) {
+            let h = 2166136261;
+            for (let i = 0; i < key.length; i++) {
+                h ^= key.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return h >>> 0;
+        }
+
+        function tagAccentFor(tag) {
+            const key = String(tag || "").trim().toLowerCase();
+            if (!key) return TAG_PALETTE[0];
+            if (TAG_ACCENT_OVERRIDES[key]) return TAG_ACCENT_OVERRIDES[key];
+            return TAG_PALETTE[hashTagKey(key) % TAG_PALETTE.length];
+        }
+
+        function styleTagChip(el, tag) {
+            el.style.setProperty("--tag-accent", tagAccentFor(tag));
+        }
+
+        function createTagChip(tag, { button = false, label } = {}) {
+            const el = button ? document.createElement("button") : document.createElement("span");
+            if (button) el.type = "button";
+            el.className = button ? "tag-chip" : "todo-chip tag";
+            styleTagChip(el, tag);
+            el.textContent = label != null ? label : tag;
+            el.title = tag;
+            return el;
+        }
+
+        const STATUS_KEY_OPTIONS = [
+            ["blocked", "Blocked"],
+            ["review", "In review"],
+            ["progress", "In progress"],
+            ["ready", "Ready / merge"],
+            ["paused", "Paused"],
+            ["other", "Other"],
+        ];
+
+        const STATUS_LABEL_PRESETS = [
+            ["in progress", "In progress"],
+            ["review", "In review"],
+            ["blocked", "Blocked"],
+            ["ready to merge", "Ready to merge"],
+            ["paused", "Paused"],
+            ["open PR", "Open PR"],
+            ["draft PR", "Draft PR"],
+        ];
+
+        function statusLabelSelectOptions(current) {
+            const cur = String(current || "").trim();
+            const out = [];
+            const presetKeys = new Set(
+                STATUS_LABEL_PRESETS.map(([v]) => v.toLowerCase())
+            );
+            if (cur && !presetKeys.has(cur.toLowerCase())) {
+                out.push([cur, cur]);
+            }
+            return out.concat(STATUS_LABEL_PRESETS);
+        }
+
+        function statusKeyDisplayLabel(todo) {
+            const k = (todo.status_key || "").toLowerCase();
+            const hit = STATUS_KEY_OPTIONS.find(([val]) => val === k);
+            if (hit) return hit[1];
+            return statusTone(todo.status) === "default" ? "Other" : statusTone(todo.status);
+        }
+
+        function statusToneForTodo(todo) {
+            const k = (todo.status_key || "").toLowerCase();
+            if (k === "blocked" || k === "review" || k === "progress" || k === "ready" || k === "paused") {
+                return k;
+            }
+            return statusTone(todo.status);
+        }
+
+        function urgencyClassForTodo(todo) {
+            if (todo.done) return "muted";
+            const p = typeof todo.priority === "number" ? todo.priority : 1;
+            if (p >= 3) return "high";
+            const tone = statusToneForTodo(todo);
+            if (tone === "blocked") return "high";
+            if (tone === "review" || tone === "progress") return p >= 2 ? "high" : "medium";
+            if (tone === "ready") return "low";
+            return p >= 2 ? "medium" : "muted";
+        }
+
+        function ciDotForTodo(todo) {
+            const map = boot.discovery && boot.discovery.prStatusByTodoId;
+            const ci = map ? map[todo.id] : null;
+            if (!ci) return null;
+            const el = document.createElement("span");
+            const roll = (ci.rollup || "unknown").toLowerCase();
+            el.className = "ci-dot " + (roll === "success" || roll === "failure" || roll === "pending" ? roll : "unknown");
+            const title = "CI: " + (ci.rollup || "?") + (ci.reviewDecision ? " · " + ci.reviewDecision : "");
+            el.title = title;
+            el.setAttribute("aria-label", title);
+            return el;
+        }
+
+        function primaryPrLinkChip(todo) {
+            if (!todo.pr_number && !todo.pr_url) return null;
+            const rk = repoKey(todo.repo);
+            const c = chip("pr repo-" + rk);
+            const url = todo.pr_url || githubPrUrl(todo.repo, todo.pr_number);
+            const extra = (todo.prs || []).length;
+            if (url) {
+                const a = document.createElement("a");
+                a.href = url;
+                a.textContent = "#" + todo.pr_number + (extra > 0 ? " +" + extra : "");
+                a.title = extra > 0 ? "Primary PR #" + todo.pr_number + " (+" + extra + " more)" : "Open PR #" + todo.pr_number;
+                wireExternalAnchor(a);
+                c.appendChild(a);
+            } else if (todo.pr_number) {
+                c.textContent = "#" + todo.pr_number;
+            }
+            return c;
+        }
+
         const STATUS_BUCKETS = [
             { tone: "blocked", label: "Blocked" },
             { tone: "review", label: "In review" },
@@ -1722,15 +2221,6 @@
             return "default";
         }
 
-        function urgencyClassForTodo(todo) {
-            if (todo.done) return "muted";
-            const tone = statusTone(todo.status);
-            if (tone === "blocked") return "high";
-            if (tone === "review" || tone === "progress") return "medium";
-            if (tone === "ready") return "low";
-            return "muted";
-        }
-
         function prCountForTodo(todo) {
             let n = 0;
             if (todo.pr_number || todo.pr_url) n += 1;
@@ -1748,10 +2238,14 @@
                 todo.title,
                 todo.label,
                 todo.status,
+                todo.status_key,
+                todo.next_action,
+                todo.waiting_on,
                 todo.repo,
                 todo.branch,
                 todo.notes,
                 todo.worktree,
+                (todo.tags || []).join(" "),
             ]
                 .filter(Boolean)
                 .join(" ")
@@ -1814,12 +2308,20 @@
                 const staleIds = new Set((boot.discovery?.staleTrackedPrs || []).map((r) => r.todoId));
                 return todos.filter((t) => staleIds.has(t.id));
             }
+            if (pillFilter === "inReview") {
+                return todos.filter((t) => statusToneForTodo(t) === "review");
+            }
+            if (pillFilter === "blocked") {
+                return todos.filter((t) => statusToneForTodo(t) === "blocked");
+            }
             return todos;
         }
 
         const PILL_DEFS = [
             { id: "allOpen", label: "All open" },
             { id: "hasPr", label: "Has PR" },
+            { id: "inReview", label: "In review" },
+            { id: "blocked", label: "Blocked" },
             { id: "needsReconcile", label: "Needs reconcile" },
             { id: "workspace", label: "This workspace" },
         ];
@@ -1976,42 +2478,7 @@
         function buildMeta(todo) {
             const meta = document.createElement("div");
             meta.className = "todo-meta";
-            const rk = repoKey(todo.repo);
 
-            if (todo.repo) {
-                meta.appendChild(chip("repo repo-" + rk, todo.repo));
-            }
-            if (todo.pr_number) {
-                const c = chip("pr repo-" + rk);
-                const url = todo.pr_url || githubPrUrl(todo.repo, todo.pr_number);
-                if (url) {
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.textContent = "#" + todo.pr_number;
-                    a.title = "Open PR #" + todo.pr_number;
-                    wireExternalAnchor(a);
-                    c.appendChild(a);
-                } else {
-                    c.textContent = "#" + todo.pr_number;
-                }
-                meta.appendChild(c);
-            }
-            (todo.prs || []).forEach((pr) => {
-                const prk = repoKey(pr.repo);
-                const c = chip("pr" + (prk ? " repo-" + prk : ""));
-                const a = document.createElement("a");
-                a.href = pr.url;
-                a.textContent = (pr.repo ? REPO_VIS[prk] ? REPO_VIS[prk].short + " " : pr.repo + " " : "") + "#" + pr.number;
-                a.title = "Open PR #" + pr.number;
-                wireExternalAnchor(a);
-                c.appendChild(a);
-                meta.appendChild(c);
-            });
-            (todo.tags || []).slice(0, 5).forEach((tag) => {
-                const c = chip("tag", tag);
-                c.classList.add("tag-chip-display");
-                meta.appendChild(c);
-            });
             if (todo.branch) {
                 const c = chip("branch", todo.branch);
                 c.title = "Click to copy branch";
@@ -2038,6 +2505,17 @@
                 });
                 meta.appendChild(c);
             }
+            (todo.prs || []).forEach((pr) => {
+                const prk = repoKey(pr.repo);
+                const c = chip("pr" + (prk ? " repo-" + prk : ""));
+                const a = document.createElement("a");
+                a.href = pr.url;
+                a.textContent = (pr.repo ? REPO_VIS[prk] ? REPO_VIS[prk].short + " " : pr.repo + " " : "") + "#" + pr.number;
+                a.title = "Open PR #" + pr.number;
+                wireExternalAnchor(a);
+                c.appendChild(a);
+                meta.appendChild(c);
+            });
             (todo.links || []).forEach((link) => {
                 const c = chip("link");
                 const a = document.createElement("a");
@@ -2048,13 +2526,17 @@
                 c.appendChild(a);
                 meta.appendChild(c);
             });
-            if (meta.childNodes.length > 2) {
+            if (todo.waiting_on) {
+                meta.appendChild(chip("branch", "⏳ " + todo.waiting_on));
+            }
+            const visibleCap = 3;
+            if (meta.childNodes.length > visibleCap) {
                 const chips = [...meta.children];
                 const overflow = document.createElement("span");
                 overflow.className = "meta-overflow hidden";
-                chips.slice(2).forEach((node) => overflow.appendChild(node));
-                meta.replaceChildren(...chips.slice(0, 2), overflow);
-                const extra = chips.length - 2;
+                chips.slice(visibleCap).forEach((node) => overflow.appendChild(node));
+                meta.replaceChildren(...chips.slice(0, visibleCap), overflow);
+                const extra = chips.length - visibleCap;
                 const more = chip("meta-more", "+" + extra);
                 more.title = "Show " + extra + " more fields";
                 more.addEventListener("click", (ev) => {
@@ -2082,17 +2564,30 @@
                 control.value = value || "";
             } else if (opts && opts.type === "select") {
                 control = document.createElement("select");
+                const want = String(value ?? "");
                 (opts.options || []).forEach(([val, text]) => {
                     const o = document.createElement("option");
                     o.value = val;
                     o.textContent = text;
-                    if (val === (value || "")) o.selected = true;
+                    if (
+                        val === want ||
+                        (opts.matchStatusLabel &&
+                            val.toLowerCase() === want.toLowerCase())
+                    ) {
+                        o.selected = true;
+                    }
                     control.appendChild(o);
                 });
             } else if (opts && opts.type === "number") {
                 control = document.createElement("input");
                 control.type = "number";
                 control.value = value != null && value !== "" ? String(value) : "";
+                if (opts.min != null) control.min = String(opts.min);
+                if (opts.max != null) control.max = String(opts.max);
+            } else if (opts && opts.type === "checkbox") {
+                control = document.createElement("input");
+                control.type = "checkbox";
+                control.checked = Boolean(value);
             } else {
                 control = document.createElement("input");
                 control.type = "text";
@@ -2146,10 +2641,8 @@
                     return;
                 }
                 selected.forEach((tag) => {
-                    const chip = document.createElement("button");
-                    chip.type = "button";
-                    chip.className = "tag-chip on";
-                    chip.textContent = tag + " ×";
+                    const chip = createTagChip(tag, { button: true, label: tag + " ×" });
+                    chip.classList.add("on");
                     chip.title = "Remove tag";
                     chip.addEventListener("click", (ev) => {
                         ev.stopPropagation();
@@ -2165,10 +2658,7 @@
                 optionRow.replaceChildren();
                 allVocab().forEach((tag) => {
                     if (selected.has(tag)) return;
-                    const btn = document.createElement("button");
-                    btn.type = "button";
-                    btn.className = "tag-chip";
-                    btn.textContent = "+ " + tag;
+                    const btn = createTagChip(tag, { button: true, label: "+ " + tag });
                     btn.addEventListener("click", (ev) => {
                         ev.stopPropagation();
                         selected.add(tag);
@@ -2219,13 +2709,121 @@
             return wrap;
         }
 
+        function postMergeWorkRows(primaryId, mergeIds) {
+            if (!primaryId || !mergeIds.length) return;
+            expandedId = primaryId;
+            saveUiState();
+            vscode.postMessage({
+                type: "mergeWorkRows",
+                primaryId,
+                mergeIds,
+            });
+        }
+
+        function buildMergeIntoSection(todo) {
+            const wrap = document.createElement("div");
+            wrap.className = "merge-into-panel";
+            const label = document.createElement("span");
+            label.className = "field-label";
+            label.textContent = "Nest under this task";
+            wrap.appendChild(label);
+            const hint = document.createElement("p");
+            hint.className = "disc-hint";
+            hint.style.margin = "0 0 .4rem";
+            hint.textContent =
+                "Selected rows become subtasks here (nested under this card). Rows are not deleted.";
+            wrap.appendChild(hint);
+
+            const others = (boot.activeTasks.todos || []).filter(
+                (t) => !t.done && t.id !== todo.id
+            );
+            if (!others.length) {
+                const empty = document.createElement("p");
+                empty.className = "disc-hint";
+                empty.textContent = "No other open tasks to merge.";
+                wrap.appendChild(empty);
+                return wrap;
+            }
+
+            const list = document.createElement("div");
+            list.className = "merge-candidate-list";
+            others.forEach((t) => {
+                const row = document.createElement("label");
+                row.className = "merge-candidate";
+                const cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.value = t.id;
+                cb.dataset.mergeSource = "1";
+                row.appendChild(cb);
+                const text = document.createElement("span");
+                text.textContent = (t.title || t.label || "Untitled") +
+                    (t.repo ? " · " + t.repo : "");
+                row.appendChild(text);
+                list.appendChild(row);
+            });
+            wrap.appendChild(list);
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "primary";
+            btn.textContent = "Nest selected under this row";
+            btn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                const mergeIds = [...list.querySelectorAll("input[type=checkbox]:checked")]
+                    .map((el) => el.value)
+                    .filter(Boolean);
+                if (!mergeIds.length) return;
+                const titles = mergeIds
+                    .map((id) => others.find((t) => t.id === id))
+                    .filter(Boolean)
+                    .map((t) => t.title || t.label)
+                    .join(", ");
+                const ok = window.confirm(
+                    "Nest " +
+                        mergeIds.length +
+                        " task(s) under \"" +
+                        (todo.title || todo.label) +
+                        "\"?\n\n" +
+                        titles
+                );
+                if (!ok) return;
+                postMergeWorkRows(todo.id, mergeIds);
+            });
+            wrap.appendChild(btn);
+            return wrap;
+        }
+
         function buildExpandPanel(todo) {
             const panel = document.createElement("div");
             panel.className = "task-expand-panel";
             const grid = document.createElement("div");
             grid.className = "field-grid";
             grid.appendChild(fieldInput("Title", todo.title || todo.label, { field: "title" }));
-            grid.appendChild(fieldInput("Status", todo.status, { field: "status" }));
+            grid.appendChild(fieldInput("Status", todo.status, {
+                field: "status",
+                type: "select",
+                matchStatusLabel: true,
+                options: statusLabelSelectOptions(todo.status),
+            }));
+            grid.appendChild(fieldInput("Next action", todo.next_action, { field: "next_action" }));
+            grid.appendChild(fieldInput("Priority (0–3)", todo.priority != null ? todo.priority : 1, {
+                field: "priority",
+                type: "number",
+                min: 0,
+                max: 3,
+            }));
+            grid.appendChild(fieldInput("Pinned", todo.pinned, { field: "pinned", type: "checkbox" }));
+            grid.appendChild(fieldInput("Waiting on", todo.waiting_on, { field: "waiting_on" }));
+            const blockerOpts = [["", "—"]];
+            (boot.activeTasks.todos || []).filter((t) => !t.done && t.id !== todo.id).forEach((t) => {
+                blockerOpts.push([t.id, (t.title || t.label || "Task").slice(0, 48)]);
+            });
+            grid.appendChild(fieldInput("Blocked by", todo.blocked_by_id, {
+                field: "blocked_by_id",
+                type: "select",
+                options: blockerOpts,
+            }));
+            grid.appendChild(fieldInput("Cloud agent id", todo.cloud_agent_id, { field: "cloud_agent_id" }));
             grid.appendChild(fieldInput("Repo", todo.repo, {
                 field: "repo",
                 type: "select",
@@ -2240,24 +2838,19 @@
             grid.appendChild(fieldInput("Worktree", todo.worktree, { field: "worktree" }));
             grid.appendChild(fieldInput("PR number", todo.pr_number, { field: "pr_number", type: "number" }));
             grid.appendChild(fieldInput("PR URL", todo.pr_url, { field: "pr_url" }));
+            grid.appendChild(fieldInput("Extra PRs (JSON)", JSON.stringify(todo.prs || [], null, 2), {
+                field: "prs_json",
+                type: "textarea",
+            }));
+            grid.appendChild(fieldInput("Links (JSON)", JSON.stringify(todo.links || [], null, 2), {
+                field: "links_json",
+                type: "textarea",
+            }));
             const vocab = (boot.activeTasks && boot.activeTasks.tagVocab) || [];
             grid.appendChild(buildTagFieldEditor(todo, vocab));
             grid.appendChild(fieldInput("Notes", todo.notes, { field: "notes", type: "textarea" }));
             panel.appendChild(grid);
-
-            const extra = document.createElement("div");
-            extra.className = "expand-readonly";
-            const bits = [];
-            (todo.prs || []).forEach((pr) => {
-                bits.push("PR " + (pr.repo ? pr.repo + " " : "") + "#" + pr.number);
-            });
-            (todo.links || []).forEach((link) => {
-                bits.push(link.label);
-            });
-            if (bits.length) {
-                extra.textContent = "Also linked: " + bits.join(" · ");
-            }
-            if (extra.textContent) panel.appendChild(extra);
+            panel.appendChild(buildMergeIntoSection(todo));
 
             const actions = document.createElement("div");
             actions.className = "expand-actions";
@@ -2274,6 +2867,19 @@
                     if (key === "pr_number") {
                         const raw = el.value.trim();
                         fields.pr_number = raw ? parseInt(raw, 10) : null;
+                        return;
+                    }
+                    if (key === "priority") {
+                        const raw = el.value.trim();
+                        fields.priority = raw === "" ? 1 : parseInt(raw, 10);
+                        return;
+                    }
+                    if (key === "pinned") {
+                        fields.pinned = el.checked;
+                        return;
+                    }
+                    if (key === "blocked_by_id") {
+                        fields.blocked_by_id = el.value.trim() || null;
                         return;
                     }
                     fields[key] = el.value;
@@ -2368,13 +2974,14 @@
             }
         }
 
-        function buildTaskCard(todo) {
+        function buildTaskCard(todo, childrenByParent) {
             const rk = repoKey(todo.repo);
             const card = document.createElement("article");
             card.className = "task-card" + (todo.done ? " done" : "") + (rk ? " repo-" + rk : "");
+            if (todo.pinned) card.classList.add("pinned");
             if (expandedId === todo.id) card.classList.add("expanded");
             card.dataset.id = todo.id;
-            card.dataset.group = groupMode === "repo" ? (rk || "unknown") : groupMode === "status" ? statusTone(todo.status) : "list";
+            card.dataset.group = groupMode === "repo" ? (rk || "unknown") : groupMode === "status" ? statusToneForTodo(todo) : "list";
             card.style.setProperty("--card-accent", cardAccentFor(todo));
             card.tabIndex = kbdFocusId === todo.id ? 0 : -1;
 
@@ -2384,10 +2991,14 @@
             const handle = document.createElement("div");
             handle.className = "drag-handle";
             handle.textContent = "⠿";
-            handle.title = "Drag to reorder";
+            handle.title = groupMode === "repo"
+                ? "Drag: reorder, nest (center), or drop section header to change repo"
+                : groupMode === "status"
+                    ? "Drag: reorder, nest (center), or drop section header to change status"
+                    : "Drag to reorder; drop on task center to nest";
             handle.setAttribute("role", "button");
             handle.setAttribute("aria-label", "Drag to reorder " + (todo.title || todo.label || "task"));
-            handle.classList.toggle("hidden", groupMode !== "list");
+            handle.classList.remove("hidden");
             handle.addEventListener("mousedown", () => { card.draggable = true; });
             wireDrag(card, handle);
 
@@ -2425,50 +3036,96 @@
                 badge.title = "No repo";
             }
 
+            const pinBtn = document.createElement("button");
+            pinBtn.type = "button";
+            pinBtn.className = "card-pin-btn" + (todo.pinned ? " is-pinned" : "");
+            pinBtn.textContent = "📌";
+            pinBtn.title = todo.pinned ? "Unpin (move to Open)" : "Pin to top";
+            pinBtn.setAttribute(
+                "aria-label",
+                todo.pinned ? "Unpin task" : "Pin task to top"
+            );
+            pinBtn.setAttribute("aria-pressed", todo.pinned ? "true" : "false");
+            pinBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                vscode.postMessage({
+                    type: "setPinned",
+                    id: todo.id,
+                    pinned: !todo.pinned,
+                });
+            });
+
             const body = document.createElement("div");
             body.className = "task-card-body";
 
             const titleRow = document.createElement("div");
             titleRow.className = "title-row";
 
-            if (!todo.done && todo.status) {
-                const tone = statusTone(todo.status);
-                const eyebrow = document.createElement("span");
-                eyebrow.className = "status-eyebrow tone-" + tone;
-                eyebrow.textContent = todo.status;
-                body.appendChild(eyebrow);
+            if (!todo.done) {
+                const urg = document.createElement("span");
+                urg.className = "urgency-dot " + urgencyClassForTodo(todo);
+                urg.title = "Priority / status signal";
+                titleRow.appendChild(urg);
             }
 
             const titleEl = document.createElement("div");
             titleEl.className = "todo-title";
             titleEl.textContent = todo.title || todo.label || "Untitled";
-            titleEl.title = "Click to expand details";
+            titleEl.title = (todo.status ? todo.status + " — " : "") + "Click to expand details";
             titleRow.appendChild(titleEl);
 
-            const prN = prCountForTodo(todo);
-            if (prN > 0) {
-                const prBadge = document.createElement("span");
-                prBadge.className = "pr-count-badge has-pr";
-                prBadge.title = prN === 1 ? "1 linked PR" : prN + " linked PRs";
-                prBadge.textContent = prN === 1 ? "PR" : "PR " + prN;
-                titleRow.appendChild(prBadge);
+            if (taskAppliesToWorkspaceContext(todo)) {
+                const here = document.createElement("span");
+                here.className = "here-pill";
+                here.textContent = "Here";
+                here.title = "Matches this workspace (repo/branch/worktree)";
+                titleRow.appendChild(here);
             }
+
+            const ciDot = !todo.done ? ciDotForTodo(todo) : null;
+            if (ciDot) titleRow.appendChild(ciDot);
+
+            const prChip = primaryPrLinkChip(todo);
+            if (prChip) titleRow.appendChild(prChip);
 
             body.appendChild(titleRow);
 
+            if (todo.next_action && !todo.done) {
+                const na = document.createElement("div");
+                na.className = "todo-next-action";
+                na.textContent = todo.next_action;
+                body.appendChild(na);
+            }
+
+            const secondary = document.createElement("div");
+            secondary.className = "meta-row-secondary";
+            if (!todo.done) {
+                const tone = statusToneForTodo(todo);
+                const pill = document.createElement("span");
+                pill.className = "status-pill tone-" + tone;
+                pill.textContent = statusKeyDisplayLabel(todo);
+                pill.title = todo.status || statusKeyDisplayLabel(todo);
+                secondary.appendChild(pill);
+            }
+            const tags = (todo.tags || []).filter(Boolean);
+            tags.slice(0, 4).forEach((tag) => {
+                secondary.appendChild(createTagChip(tag));
+            });
+            if (tags.length > 4) {
+                const more = chip("tag", "+" + (tags.length - 4));
+                styleTagChip(more, tags[4]);
+                more.title = tags.slice(4).join(", ");
+                secondary.appendChild(more);
+            }
+            if (secondary.childNodes.length) body.appendChild(secondary);
+
             const meta = buildMeta(todo);
             if (meta) body.appendChild(meta);
-            const ci = ciBadgeForTodo(todo);
-            if (ci) {
-                const ciWrap = document.createElement("div");
-                ciWrap.style.marginTop = ".25rem";
-                ciWrap.appendChild(ci);
-                body.appendChild(ciWrap);
-            }
 
             head.appendChild(handle);
             head.appendChild(checkWrap);
             head.appendChild(badge);
+            head.appendChild(pinBtn);
             head.appendChild(body);
             card.appendChild(head);
 
@@ -2476,8 +3133,20 @@
                 card.appendChild(buildExpandPanel(todo));
             }
 
+            if (childrenByParent) {
+                const kids = childrenByParent.get(todo.id);
+                if (kids && kids.length) {
+                    const nest = document.createElement("div");
+                    nest.className = "task-nest";
+                    kids.forEach((child) => {
+                        nest.appendChild(buildTaskCard(child, childrenByParent));
+                    });
+                    card.appendChild(nest);
+                }
+            }
+
             card.addEventListener("click", (ev) => {
-                if (ev.target.closest("a, button, input, textarea, select, label.check, .drag-handle, .task-expand-panel")) {
+                if (ev.target.closest("a, button, input, textarea, select, label.check, .drag-handle, .task-expand-panel, .card-pin-btn")) {
                     return;
                 }
                 toggleExpanded(todo.id);
@@ -2519,6 +3188,155 @@
             showDoneModal(todo);
         }
 
+        function indexChildrenByParent(todos) {
+            const map = new Map();
+            const order = new Map(todos.map((t, i) => [t.id, i]));
+            todos.forEach((t) => {
+                const p = (t.parent_id || "").trim();
+                if (!p) return;
+                if (!map.has(p)) map.set(p, []);
+                map.get(p).push(t);
+            });
+            for (const arr of map.values()) {
+                arr.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+            }
+            return map;
+        }
+
+        function rootTodosInSection(todos) {
+            const ids = new Set(todos.map((t) => t.id));
+            return todos.filter((t) => {
+                const p = (t.parent_id || "").trim();
+                return !p || !ids.has(p);
+            });
+        }
+
+        function parentMapFromTodos(todos) {
+            const map = new Map();
+            todos.forEach((t) => {
+                map.set(t.id, (t.parent_id || "").trim() || null);
+            });
+            return map;
+        }
+
+        function isUnderAncestor(nodeId, ancestorId, parentMap) {
+            let cur = parentMap.get(nodeId) || null;
+            while (cur) {
+                if (cur === ancestorId) return true;
+                cur = parentMap.get(cur) || null;
+            }
+            return false;
+        }
+
+        function insertAfterSubtree(orderIds, parentId, childId, parentMap) {
+            const without = orderIds.filter((id) => id !== childId);
+            const idx = without.indexOf(parentId);
+            if (idx < 0) {
+                without.push(childId);
+                return without;
+            }
+            let end = idx + 1;
+            while (end < without.length && isUnderAncestor(without[end], parentId, parentMap)) {
+                end += 1;
+            }
+            without.splice(end, 0, childId);
+            return without;
+        }
+
+        function dragDropZone(card, clientY) {
+            const rect = card.getBoundingClientRect();
+            const y = (clientY - rect.top) / rect.height;
+            if (y < 0.25) return "before";
+            if (y > 0.75) return "after";
+            return "nest";
+        }
+
+        function groupSyncForSectionKey(groupKey) {
+            if (groupMode === "list" || !groupKey) return undefined;
+            if (groupMode === "repo") {
+                if (groupKey === "unknown") return { repo: null };
+                if (REPO_VIS[groupKey]) return { repo: groupKey };
+                return undefined;
+            }
+            if (groupMode === "status") {
+                const bucket = STATUS_BUCKETS.find((b) => b.tone === groupKey);
+                const tone = groupKey;
+                return {
+                    status: bucket ? bucket.label : "Other",
+                    status_key: tone === "default" ? "other" : tone,
+                };
+            }
+            return undefined;
+        }
+
+        function groupSyncForTargetCard(targetTodo, cardGroupKey) {
+            return groupSyncForSectionKey(cardGroupKey);
+        }
+
+        function applyGroupSyncToTodo(todo, sync) {
+            if (!sync || !todo) return;
+            if ("repo" in sync) todo.repo = sync.repo;
+            if (sync.status !== undefined) todo.status = sync.status;
+            if (sync.status_key !== undefined) todo.status_key = sync.status_key;
+        }
+
+        function todosMatchingSection(groupKey) {
+            const todos = (boot.activeTasks.todos || []).filter((t) => !t.done);
+            if (groupMode === "repo") {
+                return todos.filter((t) => (repoKey(t.repo) || "unknown") === groupKey);
+            }
+            if (groupMode === "status") {
+                return todos.filter((t) => statusToneForTodo(t) === groupKey);
+            }
+            return todos;
+        }
+
+        function wireSectionDrop(sectionEl, sectionGroupKey) {
+            if (groupMode === "list" || !sectionGroupKey) return;
+            const head = sectionEl.querySelector(".section-head");
+            if (!head) return;
+            head.addEventListener("dragover", (ev) => {
+                if (!draggedId) return;
+                ev.preventDefault();
+                ev.dataTransfer.dropEffect = "move";
+                sectionEl.classList.add("section-drop-target");
+            });
+            head.addEventListener("dragleave", (ev) => {
+                if (ev.relatedTarget && head.contains(ev.relatedTarget)) return;
+                sectionEl.classList.remove("section-drop-target");
+            });
+            head.addEventListener("drop", (ev) => {
+                if (!draggedId) return;
+                ev.preventDefault();
+                sectionEl.classList.remove("section-drop-target");
+                applyDropOnSection(draggedId, sectionGroupKey);
+                clearIndicators();
+            });
+        }
+
+        function applyDropOnSection(dragId, sectionGroupKey) {
+            const sync = groupSyncForSectionKey(sectionGroupKey);
+            if (!sync) return;
+            const inSection = todosMatchingSection(sectionGroupKey).filter((t) => t.id !== dragId);
+            if (inSection.length) {
+                const last = inSection[inSection.length - 1];
+                applyMoveSibling(dragId, last.id, true, sync);
+                return;
+            }
+            const todos = boot.activeTasks.todos || [];
+            const byId = new Map(todos.map((t) => [t.id, { ...t }]));
+            const drag = byId.get(dragId);
+            if (!drag) return;
+            drag.parent_id = null;
+            applyGroupSyncToTodo(drag, sync);
+            const openIds = todos.filter((t) => !t.done).map((t) => t.id);
+            const without = openIds.filter((id) => id !== dragId);
+            without.push(dragId);
+            boot.activeTasks.todos = without.map((id) => byId.get(id)).filter(Boolean);
+            vscode.postMessage({ type: "moveTaskToSection", childId: dragId, groupSync: sync });
+            scheduleRender();
+        }
+
         function wireDrag(card, handle) {
             card.addEventListener("dragstart", (ev) => {
                 draggedId = card.dataset.id;
@@ -2534,54 +3352,87 @@
             });
             card.addEventListener("dragover", (ev) => {
                 if (!draggedId || card.dataset.id === draggedId) return;
-                if (card.dataset.group !== draggedGroup()) return;
                 ev.preventDefault();
                 ev.dataTransfer.dropEffect = "move";
-                const rect = card.getBoundingClientRect();
-                const after = ev.clientY > rect.top + rect.height / 2;
+                const zone = dragDropZone(card, ev.clientY);
                 clearIndicators();
-                card.classList.add(after ? "drop-after" : "drop-before");
+                if (zone === "nest") {
+                    card.classList.add("drop-nest");
+                } else {
+                    card.classList.add(zone === "after" ? "drop-after" : "drop-before");
+                }
             });
             card.addEventListener("dragleave", () => {
-                card.classList.remove("drop-before", "drop-after");
+                card.classList.remove("drop-before", "drop-after", "drop-nest");
             });
             card.addEventListener("drop", (ev) => {
                 if (!draggedId || card.dataset.id === draggedId) return;
-                if (card.dataset.group !== draggedGroup()) return;
                 ev.preventDefault();
-                const rect = card.getBoundingClientRect();
-                const after = ev.clientY > rect.top + rect.height / 2;
-                applyReorder(draggedId, card.dataset.id, after);
+                const zone = dragDropZone(card, ev.clientY);
+                if (zone === "nest") {
+                    applyNest(draggedId, card.dataset.id, card.dataset.group);
+                } else {
+                    applyMoveSibling(draggedId, card.dataset.id, zone === "after", groupSyncForTargetCard(cardTodoById(card.dataset.id), card.dataset.group));
+                }
                 clearIndicators();
             });
         }
 
-        function draggedGroup() {
-            const el = document.querySelector(
-                '.task-card[data-id="' + CSS.escape(draggedId) + '"]'
-            );
-            return el ? el.dataset.group : null;
+        function clearIndicators() {
+            document.querySelectorAll(".task-card.drop-before, .task-card.drop-after, .task-card.drop-nest")
+                .forEach((el) => el.classList.remove("drop-before", "drop-after", "drop-nest"));
         }
 
-        function clearIndicators() {
-            document.querySelectorAll(".task-card.drop-before, .task-card.drop-after")
-                .forEach((el) => el.classList.remove("drop-before", "drop-after"));
+        function applyNest(childId, parentId, parentCardGroup) {
+            const todos = boot.activeTasks.todos || [];
+            const parentMap = parentMapFromTodos(todos);
+            if (isUnderAncestor(parentId, childId, parentMap)) return;
+            const byId = new Map(todos.map((t) => [t.id, { ...t }]));
+            const child = byId.get(childId);
+            const parent = byId.get(parentId);
+            if (!child || !parent) return;
+            const sync = groupSyncForTargetCard(parent, parentCardGroup);
+            child.parent_id = parentId;
+            applyGroupSyncToTodo(child, sync);
+            parentMap.set(childId, parentId);
+            const openIds = todos.filter((t) => !t.done).map((t) => t.id);
+            const order = insertAfterSubtree(openIds, parentId, childId, parentMap);
+            boot.activeTasks.todos = order.map((id) => byId.get(id)).filter(Boolean);
+            const msg = { type: "nestTask", childId, parentId };
+            if (sync) msg.groupSync = sync;
+            vscode.postMessage(msg);
+            scheduleRender();
+        }
+
+        function applyMoveSibling(dragId, targetId, after, sync) {
+            const todos = boot.activeTasks.todos || [];
+            const byId = new Map(todos.map((t) => [t.id, { ...t }]));
+            const target = byId.get(targetId);
+            const drag = byId.get(dragId);
+            if (!target || !drag) return;
+            const newParent = (target.parent_id || "").trim() || null;
+            drag.parent_id = newParent;
+            applyGroupSyncToTodo(drag, sync);
+            const parentMap = parentMapFromTodos([...byId.values()]);
+            if (newParent && isUnderAncestor(newParent, dragId, parentMap)) return;
+            const openIds = todos.filter((t) => !t.done).map((t) => t.id);
+            const without = openIds.filter((id) => id !== dragId);
+            let idx = without.indexOf(targetId);
+            if (idx < 0) {
+                without.push(dragId);
+            } else {
+                if (after) idx += 1;
+                without.splice(idx, 0, dragId);
+            }
+            boot.activeTasks.todos = without.map((id) => byId.get(id)).filter(Boolean);
+            const msg = { type: "moveTaskSibling", childId: dragId, targetId, after };
+            if (sync) msg.groupSync = sync;
+            vscode.postMessage(msg);
+            scheduleRender();
         }
 
         function applyReorder(dragId, targetId, after) {
-            const todos = (boot.activeTasks.todos || []);
-            const ids = todos.map((t) => t.id).filter((id) => id !== dragId);
-            let idx = ids.indexOf(targetId);
-            if (idx < 0) {
-                ids.push(dragId);
-            } else {
-                if (after) idx += 1;
-                ids.splice(idx, 0, dragId);
-            }
-            const byId = new Map(todos.map((t) => [t.id, t]));
-            boot.activeTasks.todos = ids.map((id) => byId.get(id)).filter(Boolean);
-            vscode.postMessage({ type: "reorderTodos", order: ids });
-            scheduleRender();
+            applyMoveSibling(dragId, targetId, after);
         }
 
         function sectionHead(title, count, dotColor) {
@@ -2603,14 +3454,22 @@
             return head;
         }
 
-        function listSection(title, todos, dotColor) {
+        function listSection(title, todos, dotColor, sectionGroupKey) {
             const wrap = document.createElement("section");
             wrap.className = "section";
+            if (sectionGroupKey) {
+                wrap.dataset.sectionGroup = sectionGroupKey;
+            }
             wrap.appendChild(sectionHead(title, todos.length, dotColor));
             const list = document.createElement("div");
             list.className = "task-cards";
-            todos.forEach((t) => list.appendChild(buildTaskCard(t)));
+            const childrenByParent = indexChildrenByParent(todos);
+            const roots = rootTodosInSection(todos);
+            const order = new Map(todos.map((t, i) => [t.id, i]));
+            roots.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+            roots.forEach((t) => list.appendChild(buildTaskCard(t, childrenByParent)));
             wrap.appendChild(list);
+            wireSectionDrop(wrap, sectionGroupKey);
             return wrap;
         }
 
@@ -2620,16 +3479,16 @@
                 const items = todos.filter((t) => repoKey(t.repo) === key);
                 items.forEach((t) => seen.add(t.id));
                 if (items.length) {
-                    root.appendChild(listSection(REPO_VIS[key].name, items, REPO_VIS[key].accent));
+                    root.appendChild(listSection(REPO_VIS[key].name, items, REPO_VIS[key].accent, key));
                 }
             });
             const rest = todos.filter((t) => !seen.has(t.id));
-            if (rest.length) root.appendChild(listSection("Other", rest, "var(--muted)"));
+            if (rest.length) root.appendChild(listSection("Other", rest, "var(--muted)", "unknown"));
         }
 
         function groupByStatus(root, todos) {
             STATUS_BUCKETS.forEach((bucket) => {
-                const items = todos.filter((t) => statusTone(t.status) === bucket.tone);
+                const items = todos.filter((t) => statusToneForTodo(t) === bucket.tone);
                 if (items.length) {
                     const dot = {
                         blocked: "var(--status-blocked-fg)",
@@ -2639,9 +3498,96 @@
                         paused: "var(--muted)",
                         default: "var(--accent)",
                     }[bucket.tone];
-                    root.appendChild(listSection(bucket.label, items, dot));
+                    root.appendChild(listSection(bucket.label, items, dot, bucket.tone));
                 }
             });
+        }
+
+        function renderReconcileDock() {
+            const dock = document.getElementById("reconcileDock");
+            if (!dock) {
+                return;
+            }
+            dock.replaceChildren();
+            renderDiscovery(dock);
+        }
+
+        function renderReconcileToolbar(parent, disc) {
+            const feed = disc.reconcileFeed || {};
+            const bar = document.createElement("div");
+            bar.className = "reconcile-toolbar";
+            bar.setAttribute("role", "toolbar");
+            bar.setAttribute("aria-label", "Reconcile actions");
+
+            const refreshBtn = document.createElement("button");
+            refreshBtn.type = "button";
+            refreshBtn.id = "reconcileRefreshBtn";
+            refreshBtn.className = "primary";
+            refreshBtn.textContent = "Refresh";
+            refreshBtn.title = "Reload tasks and run GitHub + cloud reconcile scan";
+            refreshBtn.addEventListener("click", () => requestRefresh());
+            bar.appendChild(refreshBtn);
+
+            const baselineBtn = document.createElement("button");
+            baselineBtn.type = "button";
+            baselineBtn.textContent = "Reset feed baseline";
+            baselineBtn.title = "Ignore older PRs/agents until they update (incremental mode)";
+            baselineBtn.addEventListener("click", () => {
+                setRefreshSpinning(true);
+                vscode.postMessage({ type: "reconcileResetBaseline" });
+            });
+            bar.appendChild(baselineBtn);
+
+            const incrBtn = document.createElement("button");
+            incrBtn.type = "button";
+            incrBtn.classList.toggle("active", feed.backfill === false);
+            incrBtn.textContent = "Incremental";
+            incrBtn.title = "Only new/updated items after baseline";
+            incrBtn.addEventListener("click", () => {
+                if (feed.backfill === false) {
+                    return;
+                }
+                vscode.postMessage({ type: "reconcileSetBackfill", enabled: false });
+            });
+            bar.appendChild(incrBtn);
+
+            const backfillBtn = document.createElement("button");
+            backfillBtn.type = "button";
+            backfillBtn.classList.toggle("active", feed.backfill === true);
+            backfillBtn.textContent = "Full backfill";
+            backfillBtn.title = "Show all untracked open PRs and agents";
+            backfillBtn.addEventListener("click", () => {
+                if (feed.backfill === true) {
+                    return;
+                }
+                vscode.postMessage({ type: "reconcileSetBackfill", enabled: true });
+            });
+            bar.appendChild(backfillBtn);
+
+            const reviewBtn = document.createElement("button");
+            reviewBtn.type = "button";
+            reviewBtn.classList.toggle("active", feed.includeReviewRequested !== false);
+            reviewBtn.textContent = "Review PRs";
+            reviewBtn.title = "Include review-requested PRs in GitHub feed";
+            reviewBtn.addEventListener("click", () => {
+                const next = feed.includeReviewRequested === false;
+                vscode.postMessage({ type: "reconcileSetIncludeReview", enabled: next });
+            });
+            bar.appendChild(reviewBtn);
+
+            const agentHint = disc.agentConsolidation || {};
+            if (agentHint.overRecommended) {
+                const agentBtn = document.createElement("button");
+                agentBtn.type = "button";
+                agentBtn.className = "ghost";
+                agentBtn.textContent = "Consolidate brief";
+                agentBtn.addEventListener("click", () => {
+                    vscode.postMessage({ type: "copyAgentConsolidationBrief" });
+                });
+                bar.appendChild(agentBtn);
+            }
+
+            parent.appendChild(bar);
         }
 
         function renderDiscovery(root) {
@@ -2664,11 +3610,18 @@
                 !disc.githubError &&
                 !disc.cloudError
             ) {
+                renderReconcileToolbar(root, disc);
+                const idle = document.createElement("p");
+                idle.className = "disc-hint";
+                idle.textContent = "No scan yet — use Refresh scan to load GitHub and cloud feeds.";
+                root.appendChild(idle);
                 return;
             }
 
             const wrap = document.createElement("section");
             wrap.className = "section";
+
+            renderReconcileToolbar(wrap, disc);
 
             const details = document.createElement("details");
             details.className = "reconcile-details";
@@ -2706,6 +3659,15 @@
             }
             if (disc.githubError) parts.push("GitHub: " + disc.githubError);
             if (disc.cloudError) parts.push("Cloud: " + disc.cloudError);
+            const feed = disc.reconcileFeed || {};
+            if (feed.backfill === false) {
+                parts.push(
+                    "Incremental feed" +
+                        (feed.watermarkAt
+                            ? " since " + shortAt(feed.watermarkAt)
+                            : "")
+                );
+            }
             if (!hint.textContent) {
                 hint.textContent = parts.length
                     ? parts.join(" · ")
@@ -2748,7 +3710,7 @@
                 const title = document.createElement("p");
                 title.className = "disc-title";
                 title.textContent =
-                    "Merge " +
+                    "Nest " +
                     (1 + sug.mergeIds.length) +
                     " rows · " +
                     (sug.reason || "Related work");
@@ -2766,7 +3728,7 @@
                 const actions = document.createElement("div");
                 actions.className = "disc-actions";
                 actions.appendChild(
-                    discActionBtn("Merge duplicates", () => {
+                    discActionBtn("Nest as subtasks", () => {
                         vscode.postMessage({
                             type: "mergeWorkRows",
                             primaryId: sug.primaryId,
@@ -2923,13 +3885,29 @@
             root.appendChild(wrap);
         }
 
+        function splitPinnedTodos(todos) {
+            const pinned = [];
+            const rest = [];
+            todos.forEach((t) => {
+                if (t.pinned) pinned.push(t);
+                else rest.push(t);
+            });
+            return { pinned, rest };
+        }
+
         function renderOpen(root, openTodos) {
+            const { pinned, rest } = splitPinnedTodos(openTodos);
+            if (pinned.length) {
+                root.appendChild(listSection("Pinned", pinned, "var(--accent)"));
+            }
             if (groupMode === "repo") {
-                groupByRepo(root, openTodos);
+                groupByRepo(root, rest);
             } else if (groupMode === "status") {
-                groupByStatus(root, openTodos);
-            } else {
-                root.appendChild(listSection("Open", openTodos, null));
+                groupByStatus(root, rest);
+            } else if (rest.length) {
+                root.appendChild(listSection("Open", rest, null));
+            } else if (!pinned.length) {
+                root.appendChild(listSection("Open", [], null));
             }
         }
 
@@ -3012,9 +3990,8 @@
                     if (notice.action === "sync") {
                         vscode.postMessage({ type: "resyncDatabase" });
                     } else {
-                        vscode.postMessage({ type: "refresh" });
+                        requestRefresh();
                     }
-                    document.getElementById("reloadBtn").classList.add("spinning");
                 });
                 actions.appendChild(retry);
             }
@@ -3037,6 +4014,10 @@
             renderPanelNotice();
             const activeTasks = boot.activeTasks || {};
             const serverTodos = activeTasks.todos || [];
+            if (expandedId && !serverTodos.some((t) => t.id === expandedId)) {
+                expandedId = null;
+                saveUiState();
+            }
             if (boot.loadError) {
                 document.getElementById("emptyLoadError").classList.add("hidden");
             } else {
@@ -3096,8 +4077,6 @@
             root.replaceChildren();
             root.classList.toggle("grouped", groupMode !== "list");
 
-            renderDiscovery(root);
-
             const filterLabel = activeViewFilterLabel();
             const filteredOut =
                 filter === "open" &&
@@ -3123,6 +4102,7 @@
                 if (disc.scannedAt) footParts.push("Scan " + shortAt(disc.scannedAt));
                 footParts.push("Refreshed " + shortAt(boot.generatedAt));
                 renderFootMeta(footParts);
+                renderReconcileDock();
                 return;
             }
             empty.classList.add("hidden");
@@ -3137,7 +4117,7 @@
                 } else if (showReconcileFirst) {
                     const hint = document.createElement("div");
                     hint.className = "empty";
-                    hint.innerHTML = "<strong>Reconcile inbound PRs</strong> Attach or add rows in the section above.";
+                    hint.innerHTML = "<strong>Reconcile inbound PRs</strong> Attach or add rows in the section below.";
                     root.appendChild(hint);
                 } else if (q && !baseOpenTodos.length) {
                     renderFilteredEmpty(root, "search");
@@ -3160,7 +4140,13 @@
             }
 
             const footParts = [];
-            if (groupMode === "list") footParts.push("Drag ⠿ to reorder");
+            footParts.push(
+                groupMode === "repo"
+                    ? "Drag ⠿ — edges reorder; center nests; drop section header to set repo"
+                    : groupMode === "status"
+                        ? "Drag ⠿ — edges reorder; center nests; drop section header to set status"
+                        : "Drag ⠿ — edges reorder; center nests"
+            );
             if (activeTasks.updatedAt) {
                 footParts.push("Snapshot " + shortAt(activeTasks.updatedAt));
             } else if (activeTasks.source) {
@@ -3170,6 +4156,8 @@
             if (disc.scannedAt) footParts.push("Scan " + shortAt(disc.scannedAt));
             footParts.push("Refreshed " + shortAt(boot.generatedAt));
             renderFootMeta(footParts);
+
+            renderReconcileDock();
 
             if (kbdFocusId) {
                 const focused = document.querySelector(
@@ -3209,13 +4197,12 @@
         };
         document.getElementById("emptyDbBtn").onclick = () => vscode.postMessage({ type: "openDatabase" });
         document.getElementById("emptySyncBtn").onclick = () => {
+            setRefreshSpinning(true);
             vscode.postMessage({ type: "resyncDatabase" });
-            document.getElementById("reloadBtn").classList.add("spinning");
         };
 
         function invalidateAndRefresh() {
-            document.getElementById("reloadBtn").classList.add("spinning");
-            vscode.postMessage({ type: "refresh" });
+            requestRefresh();
         }
 
         document.getElementById("taskSearch").addEventListener("input", (ev) => {
@@ -3252,6 +4239,95 @@
         document.getElementById("popOutBtn").onclick = () => vscode.postMessage({ type: "popOut" });
         document.getElementById("dbBtn").onclick = () => vscode.postMessage({ type: "openDatabase" });
 
+        function hideMergeModal() {
+            document.getElementById("mergeModal").classList.add("hidden");
+        }
+
+        function renderMergeSourceCheckboxes() {
+            const primaryId = document.getElementById("mergePrimarySelect").value;
+            const list = document.getElementById("mergeSourceList");
+            list.replaceChildren();
+            const open = (boot.activeTasks.todos || []).filter((t) => !t.done);
+            open
+                .filter((t) => t.id !== primaryId)
+                .forEach((t) => {
+                    const row = document.createElement("label");
+                    const cb = document.createElement("input");
+                    cb.type = "checkbox";
+                    cb.value = t.id;
+                    cb.checked = true;
+                    row.appendChild(cb);
+                    const span = document.createElement("span");
+                    span.textContent =
+                        (t.title || t.label || "Untitled") +
+                        (t.repo ? " · " + t.repo : "");
+                    row.appendChild(span);
+                    list.appendChild(row);
+                });
+        }
+
+        function showMergeModal() {
+            const open = (boot.activeTasks.todos || []).filter((t) => !t.done);
+            if (open.length < 2) {
+                window.alert("You need at least two open tasks to merge.");
+                return;
+            }
+            const sel = document.getElementById("mergePrimarySelect");
+            sel.replaceChildren();
+            const defaultPrimary =
+                expandedId && open.some((t) => t.id === expandedId)
+                    ? expandedId
+                    : open[0].id;
+            open.forEach((t) => {
+                const o = document.createElement("option");
+                o.value = t.id;
+                o.textContent =
+                    (t.title || t.label || "Untitled") +
+                    (t.repo ? " (" + t.repo + ")" : "");
+                if (t.id === defaultPrimary) {
+                    o.selected = true;
+                }
+                sel.appendChild(o);
+            });
+            sel.onchange = () => renderMergeSourceCheckboxes();
+            renderMergeSourceCheckboxes();
+            document.getElementById("mergeModal").classList.remove("hidden");
+            document.getElementById("mergeConfirmBtn").focus();
+        }
+
+        document.getElementById("mergeTasksBtn").onclick = () => showMergeModal();
+        document.getElementById("mergeCancelBtn").onclick = () => hideMergeModal();
+        document.getElementById("mergeModal").addEventListener("click", (ev) => {
+            if (ev.target.id === "mergeModal") {
+                hideMergeModal();
+            }
+        });
+        document.getElementById("mergeConfirmBtn").onclick = () => {
+            const primaryId = document.getElementById("mergePrimarySelect").value;
+            const mergeIds = [
+                ...document.querySelectorAll("#mergeSourceList input[type=checkbox]:checked"),
+            ]
+                .map((el) => el.value)
+                .filter((id) => id && id !== primaryId);
+            if (!mergeIds.length) {
+                window.alert("Select at least one task to nest under the parent.");
+                return;
+            }
+            const primary = (boot.activeTasks.todos || []).find((t) => t.id === primaryId);
+            const ok = window.confirm(
+                "Nest " +
+                    mergeIds.length +
+                    " task(s) under \"" +
+                    (primary ? primary.title || primary.label : "selected task") +
+                    "\"?"
+            );
+            if (!ok) {
+                return;
+            }
+            hideMergeModal();
+            postMergeWorkRows(primaryId, mergeIds);
+        };
+
         function finishDone(mode) {
             if (doneModalTodoId) {
                 vscode.postMessage({ type: "setDoneMode", id: doneModalTodoId, mode });
@@ -3266,6 +4342,13 @@
             if (ev.target.id === "doneModal") hideDoneModal();
         });
         document.addEventListener("keydown", (ev) => {
+            if (ev.key === "Escape") {
+                const mergeModal = document.getElementById("mergeModal");
+                if (mergeModal && !mergeModal.classList.contains("hidden")) {
+                    hideMergeModal();
+                    return;
+                }
+            }
             if (ev.key === "Escape" && doneModalTodoId) {
                 hideDoneModal();
                 return;
@@ -3304,7 +4387,7 @@
         window.addEventListener("message", (e) => {
             if (e.data && e.data.type === "update") {
                 boot = e.data.payload;
-                document.getElementById("reloadBtn").classList.remove("spinning");
+                setRefreshSpinning(false);
                 vscode.setState({ ...(vscode.getState() || {}), hasRendered: true });
                 scheduleRender();
             }

@@ -7,7 +7,11 @@ import {
   defaultSqlitePath,
   queryTurnsFromSqlite,
 } from "./dbQuery";
-import { modelEffectiveUsdPerM, normalizePriceMode } from "./modelPricing";
+import {
+  costFromChannels,
+  modelChannelRates,
+  normalizePriceMode,
+} from "./modelPricing";
 import {
   buildUsageCostInsights,
   type UsageCostInsights,
@@ -267,14 +271,20 @@ export function expectedCostUsd(
       1_000_000
     );
   }
-  const total = uncached + cacheR + cacheW + out;
   if (mode === "model") {
     const model =
       typeof row.model === "string" || typeof row.model === "number"
         ? String(row.model)
         : "";
-    return (total * modelEffectiveUsdPerM(model)) / 1_000_000;
+    return costFromChannels(
+      uncached,
+      out,
+      cacheR,
+      cacheW,
+      modelChannelRates(model)
+    );
   }
+  const total = uncached + cacheR + cacheW + out;
   return (total * rates.total) / 1_000_000;
 }
 
@@ -298,7 +308,11 @@ function enrichRows(
       const expected = expectedCostUsd(row, priceMode, rates);
       const recorded = Number(row.cost_usd || 0);
       const mismatch = Math.abs(expected - recorded) > 0.0005;
-      enriched.cost_expected_usd = Math.round(expected * 1_000_000) / 1_000_000;
+      const rounded =
+        Math.round(expected * 1_000_000) / 1_000_000;
+      enriched.cost_expected_usd = rounded;
+      // Display uses current Cursor docs rates; recorded stays for mismatch.
+      enriched.cost_usd = rounded;
       enriched.cost_mismatch = mismatch;
       if (mismatch) {
         costMismatchCount += 1;

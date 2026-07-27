@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub PR Dashboard",
+  "version": "1.5.2",
+  "description": "Lists your open pull requests and PRs awaiting your review or mentioning you. On PR Files changed, optionally split Code/Tests and move tests last. Sign in with GitHub (OAuth device flow) or a PAT.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GitHub PRs",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["https://api.github.com/*", "https://github.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*/pull/*/changes"],
+      "js": ["content/pr-changes-tests-bottom.js"],
+      "css": ["content/pr-changes-tests-bottom.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

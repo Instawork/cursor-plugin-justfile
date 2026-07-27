@@ -310,8 +310,22 @@
                 if (!s) return "";
                 const d = new Date(s);
                 if (Number.isNaN(d.getTime())) return String(s).slice(0, 19);
-                return d.toISOString().replace("T", " ").slice(0, 19);
+                // Display in the browser's local timezone (stored values remain UTC ISO).
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, "0");
+                const dd = String(d.getDate()).padStart(2, "0");
+                const hh = String(d.getHours()).padStart(2, "0");
+                const mi = String(d.getMinutes()).padStart(2, "0");
+                const ss = String(d.getSeconds()).padStart(2, "0");
+                return yyyy + "-" + mm + "-" + dd + " " + hh + ":" + mi + ":" + ss;
             };
+            const localTzLabel = (() => {
+                try {
+                    return Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+                } catch (_) {
+                    return "local";
+                }
+            })();
 
             function utcDayKey(at) {
                 if (!at) return "";
@@ -362,7 +376,7 @@
                 priceDetail = " · model $/M table (cursor-model-rates.json)";
             }
             document.getElementById("subtitle").textContent =
-                "Generated " + shortAt(boot.generatedAt) + " UTC · pricing: " + priceLabel + priceDetail;
+                "Generated " + shortAt(boot.generatedAt) + " (" + localTzLabel + ") · pricing: " + priceLabel + priceDetail;
 
             const last = rows.length ? rows[rows.length - 1] : null;
             const conv = st.conversation_id;

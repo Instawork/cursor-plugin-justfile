@@ -12,7 +12,7 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from model_pricing import model_effective_usd_per_m, price_mode_normalized
+from model_pricing import model_channel_rates, price_mode_normalized
 
 STATE_PATH = Path.home() / "code/cursor-contexts/assistant/token-hook-state.json"
 TITLES_PATH = (
@@ -230,11 +230,16 @@ def cost_usd(
         return (
             uncached * in_m + out * out_m + cache_r * cr_m + cache_w * cw_m
         ) / 1_000_000
-    total = uncached + cache_r + cache_w + out
     if mode == "model":
-        rate = model_effective_usd_per_m(model)
-    else:
-        rate = float(os.environ.get("TOKEN_HOOK_PRICE_TOTAL_M", "0.35"))
+        ch = model_channel_rates(model)
+        return (
+            uncached * ch["input"]
+            + out * ch["output"]
+            + cache_r * ch["cacheRead"]
+            + cache_w * ch["cacheWrite"]
+        ) / 1_000_000
+    total = uncached + cache_r + cache_w + out
+    rate = float(os.environ.get("TOKEN_HOOK_PRICE_TOTAL_M", "0.35"))
     return total * rate / 1_000_000
 
 

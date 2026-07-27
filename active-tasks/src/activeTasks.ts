@@ -8,11 +8,15 @@ import {
   loadTodosFromDb,
   listTagVocab,
   reorderTasksInDb,
+  moveTaskSiblingInDb,
+  moveTaskToSectionInDb,
+  nestTaskUnderInDb,
   setSessionHidden,
   setTaskDoneInDb,
+  setTaskPinnedInDb,
   updateTaskFieldsInDb,
 } from "./activeTasksStore";
-import type { TaskFieldUpdate } from "./taskModel";
+import type { TaskFieldUpdate, TaskDragGroupSync } from "./taskModel";
 
 export type { TaskFieldUpdate, TaskLink, TaskPr, ParsedSessionTodo } from "./taskModel";
 export type { ParsedSessionTodo as SessionTodo } from "./taskModel";
@@ -42,6 +46,34 @@ export { activeTasksDbPath } from "./activeTasksStore";
 
 export function reorderTasks(orderIds: string[]): boolean {
   return reorderTasksInDb(orderIds);
+}
+
+export function nestTaskUnder(
+  childId: string,
+  parentId: string,
+  groupSync?: TaskDragGroupSync
+): boolean {
+  return nestTaskUnderInDb(childId, parentId, groupSync);
+}
+
+export function moveTaskSibling(
+  childId: string,
+  targetId: string,
+  after: boolean,
+  groupSync?: TaskDragGroupSync
+): boolean {
+  return moveTaskSiblingInDb(childId, targetId, after, groupSync);
+}
+
+export function moveTaskToSection(
+  childId: string,
+  groupSync: TaskDragGroupSync
+): boolean {
+  return moveTaskToSectionInDb(childId, groupSync);
+}
+
+export function setTaskPinned(todoId: string, pinned: boolean): boolean {
+  return setTaskPinnedInDb(todoId, pinned);
 }
 
 export function insertWorkFromQuickAdd(

@@ -11,6 +11,11 @@ import { fetchCloudAgentThreads } from "./cloudAgentThreads";
 import { getCloudApiKey } from "./cloudSecrets";
 import { fetchOpenGitHubPrs, type OpenGitHubPr } from "./githubOpenPrs";
 import {
+  filterMissingPrsForFeed,
+  filterUntrackedCloudForFeed,
+  reconcileFeedSummary,
+} from "./reconcileFeed";
+import {
   enrichTodosWithPrStatus,
   fetchPrClosedState,
   type PrCheckSummary,
@@ -37,6 +42,12 @@ export type StaleTrackedPr = {
   state: string | null;
 };
 
+export type ReconcileFeedInfo = {
+  backfill: boolean;
+  watermarkAt: string | null;
+  includeReviewRequested: boolean;
+};
+
 export type TaskDiscoverySnapshot = {
   scannedAt: string | null;
   githubError: string | null;
@@ -49,6 +60,7 @@ export type TaskDiscoverySnapshot = {
   workspace: WorkspaceMatch;
   structuralMergeCandidates: StructuralMergeCandidate[];
   agentConsolidation: AgentConsolidationHint;
+  reconcileFeed: ReconcileFeedInfo;
 };
 
 let cached: TaskDiscoverySnapshot | null = null;
@@ -211,6 +223,16 @@ async function findStaleTrackedPrs(
   return stale;
 }
 
+function emptyReconcileFeed(): ReconcileFeedInfo {
+  const s = reconcileFeedSummary();
+  return {
+    backfill: s.backfill,
+    watermarkAt:
+      s.watermarkMs !== null ? new Date(s.watermarkMs).toISOString() : null,
+    includeReviewRequested: s.includeReviewRequested,
+  };
+}
+
 function emptyDiscovery(workspace: WorkspaceMatch): TaskDiscoverySnapshot {
   return {
     scannedAt: null,
@@ -228,6 +250,7 @@ function emptyDiscovery(workspace: WorkspaceMatch): TaskDiscoverySnapshot {
       overRecommended: false,
       brief: "",
     },
+    reconcileFeed: emptyReconcileFeed(),
   };
 }
 
@@ -237,8 +260,11 @@ async function scanDiscovery(
   workspace: WorkspaceMatch
 ): Promise<TaskDiscoverySnapshot> {
   const dismissed = listDiscoveryDismissals();
+  const feed = reconcileFeedSummary();
   const [gh, apiKey] = await Promise.all([
-    fetchOpenGitHubPrs(),
+    fetchOpenGitHubPrs({
+      includeReviewRequested: feed.includeReviewRequested,
+    }),
     getCloudApiKey(secrets),
   ]);
 
@@ -250,16 +276,28 @@ async function scanDiscovery(
   }
 
   const openUrls = new Set(gh.items.map((p) => p.url));
+  const untrackedPrs = gh.items.filter((pr) => !isPrTrackedInTodos(todos, pr));
+  const missingAfterWatermark = filterMissingPrsForFeed(
+    untrackedPrs,
+    feed.watermarkMs
+  );
   const missingPrs = filterDismissed(
     "pr",
-    gh.items.filter((pr) => !isPrTrackedInTodos(todos, pr)),
+    missingAfterWatermark,
     dismissed,
     (p) => p.url
   );
   const cloudAgents = cloud.items;
+  const untrackedCloudRaw = cloud.items.filter(
+    (thread) => !isCloudThreadTracked(todos, thread)
+  );
+  const untrackedAfterWatermark = filterUntrackedCloudForFeed(
+    untrackedCloudRaw,
+    feed.watermarkMs
+  );
   const untrackedCloudAgents = filterDismissed(
     "cloud",
-    cloud.items.filter((thread) => !isCloudThreadTracked(todos, thread)),
+    untrackedAfterWatermark,
     dismissed,
     (a) => a.agentId
   );
@@ -284,6 +322,14 @@ async function scanDiscovery(
       openCount: 0,
       overRecommended: false,
       brief: "",
+    },
+    reconcileFeed: {
+      backfill: feed.backfill,
+      watermarkAt:
+        feed.watermarkMs !== null
+          ? new Date(feed.watermarkMs).toISOString()
+          : null,
+      includeReviewRequested: feed.includeReviewRequested,
     },
   };
 }

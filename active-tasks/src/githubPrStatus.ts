@@ -1,6 +1,7 @@
 import { runGh } from "./ghExec";
 import { GITHUB_NAME_WITH_OWNER } from "./repoSlugs";
 import type { ParsedSessionTodo as SessionTodo } from "./taskModel";
+import { getCachedPrStatus, setCachedPrStatus } from "./prCheckCache";
 
 export type PrCheckSummary = {
   prUrl: string;
@@ -154,10 +155,23 @@ export async function enrichTodosWithPrStatus(
   const withPr = todos.filter((t) => prNumberForTodo(t) !== null);
   const slice = withPr.slice(0, limit);
   const out: Record<string, PrCheckSummary> = {};
+  const needFetch: SessionTodo[] = [];
+  for (const todo of slice) {
+    const url = todo.pr_url?.trim() ?? todo.prs?.find((p) => p.url?.trim())?.url;
+    if (url) {
+      const hit = getCachedPrStatus(url);
+      if (hit) {
+        out[todo.id] = hit;
+        continue;
+      }
+    }
+    needFetch.push(todo);
+  }
   await Promise.all(
-    slice.map(async (todo) => {
+    needFetch.map(async (todo) => {
       const summary = await fetchPrStatusForTodo(todo);
       if (summary) {
+        setCachedPrStatus(summary.prUrl, summary);
         out[todo.id] = summary;
       }
     })

@@ -7,14 +7,26 @@ import * as path from "path";
 import {
   taskRowToLabel,
   type ParsedSessionTodo,
+  type TaskDragGroupSync,
   type TaskFieldUpdate,
   type TaskLink,
   type TaskPr,
 } from "./taskModel";
 import type { OpenGitHubPr } from "./githubOpenPrs";
 import { parseTagsJson, sanitizeTags } from "./tagsUtil";
+import {
+  clampPriority,
+  inferStatusKeyFromLabel,
+  normalizeStatusKey,
+  type StatusKey,
+} from "./statusKeyUtil";
+import {
+  insertAfterSubtreeInOrder,
+  isUnderAncestor,
+  parentIdMap,
+} from "./taskNestUtil";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const TAG_VOCAB_META = "tag_vocab";
 const VALID_REPOS = new Set(["instawork", "finch", "infrastructure"]);
 
@@ -30,6 +42,15 @@ type DbRow = {
   sort_order: number;
   title: string;
   status: string;
+  status_key: string;
+  priority: number;
+  pinned: number;
+  next_action: string | null;
+  waiting_on: string | null;
+  blocked_by_id: string | null;
+  parent_id: string | null;
+  cloud_agent_id: string | null;
+  created_at: string;
   repo: string | null;
   branch: string | null;
   worktree: string | null;
@@ -40,6 +61,8 @@ type DbRow = {
   links_json: string;
   tags_json: string;
   done: number;
+  done_at: string | null;
+  done_reason: string | null;
   updated_at: string;
 };
 
@@ -85,9 +108,11 @@ function rowToTodo(row: DbRow): ParsedSessionTodo {
   const prs = parseJsonArray<TaskPr>(row.prs_json);
   const links = parseJsonArray<TaskLink>(row.links_json);
   const tags = parseTagsJson(row.tags_json ?? "[]");
+  const statusKey = normalizeStatusKey(row.status_key);
   const activeRow: Record<string, unknown> = {
     title: row.title,
     status: row.status,
+    status_key: statusKey,
     repo: row.repo ?? undefined,
     branch: row.branch ?? undefined,
     worktree: row.worktree ?? undefined,
@@ -100,13 +125,16 @@ function rowToTodo(row: DbRow): ParsedSessionTodo {
     done: Boolean(row.done),
   };
   const label = taskRowToLabel(activeRow);
-  return {
+  const todo: ParsedSessionTodo = {
     id: row.id,
     label,
     done: Boolean(row.done),
     repo: row.repo,
     title: row.title,
     status: row.status,
+    status_key: statusKey,
+    priority: clampPriority(row.priority),
+    pinned: Boolean(row.pinned),
     pr_number: row.pr_number ?? undefined,
     pr_url: row.pr_url ?? undefined,
     branch: row.branch ?? undefined,
@@ -115,7 +143,31 @@ function rowToTodo(row: DbRow): ParsedSessionTodo {
     prs: prs.length ? prs : undefined,
     links: links.length ? links : undefined,
     tags: tags.length ? tags : undefined,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   };
+  if (row.next_action?.trim()) {
+    todo.next_action = row.next_action.trim();
+  }
+  if (row.waiting_on?.trim()) {
+    todo.waiting_on = row.waiting_on.trim();
+  }
+  if (row.blocked_by_id?.trim()) {
+    todo.blocked_by_id = row.blocked_by_id.trim();
+  }
+  if (row.parent_id?.trim()) {
+    todo.parent_id = row.parent_id.trim();
+  }
+  if (row.cloud_agent_id?.trim()) {
+    todo.cloud_agent_id = row.cloud_agent_id.trim();
+  }
+  if (row.done_at?.trim()) {
+    todo.done_at = row.done_at.trim();
+  }
+  if (row.done_reason?.trim()) {
+    todo.done_reason = row.done_reason.trim() as ParsedSessionTodo["done_reason"];
+  }
+  return todo;
 }
 
 function ensureSchema(db: Database.Database): void {
@@ -155,18 +207,75 @@ function ensureSchema(db: Database.Database): void {
   db.prepare(
     "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)"
   ).run(String(SCHEMA_VERSION));
+  const versionRow = db
+    .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
+    .get() as { value: string } | undefined;
+  if (versionRow && Number(versionRow.value) < SCHEMA_VERSION) {
+    db.prepare(
+      "UPDATE meta SET value = ? WHERE key = 'schema_version'"
+    ).run(String(SCHEMA_VERSION));
+  }
   migrateSchemaColumns(db);
+}
+
+const V2_COLUMNS: { name: string; ddl: string }[] = [
+  { name: "status_key", ddl: "TEXT NOT NULL DEFAULT 'other'" },
+  { name: "priority", ddl: "INTEGER NOT NULL DEFAULT 1" },
+  { name: "pinned", ddl: "INTEGER NOT NULL DEFAULT 0" },
+  { name: "next_action", ddl: "TEXT" },
+  { name: "waiting_on", ddl: "TEXT" },
+  { name: "blocked_by_id", ddl: "TEXT" },
+  { name: "parent_id", ddl: "TEXT" },
+  { name: "cloud_agent_id", ddl: "TEXT" },
+  { name: "created_at", ddl: "TEXT" },
+  { name: "done_at", ddl: "TEXT" },
+  { name: "done_reason", ddl: "TEXT" },
+];
+
+function backfillStatusKeys(db: Database.Database): void {
+  const rows = db
+    .prepare("SELECT id, status, status_key FROM active_work")
+    .all() as { id: string; status: string; status_key: string }[];
+  const upd = db.prepare(
+    "UPDATE active_work SET status_key = ? WHERE id = ?"
+  );
+  for (const row of rows) {
+    const current = row.status_key?.trim();
+    if (current && current !== "other") {
+      continue;
+    }
+    const inferred = inferStatusKeyFromLabel(row.status);
+    if (inferred !== "other") {
+      upd.run(inferred, row.id);
+    }
+  }
+}
+
+function backfillCreatedAt(db: Database.Database): void {
+  db.prepare(`
+    UPDATE active_work
+    SET created_at = updated_at
+    WHERE created_at IS NULL OR TRIM(created_at) = ''
+  `).run();
 }
 
 function migrateSchemaColumns(db: Database.Database): void {
   const cols = db
     .prepare("PRAGMA table_info(active_work)")
     .all() as { name: string }[];
-  if (!cols.some((c) => c.name === "tags_json")) {
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has("tags_json")) {
     db.exec(
       `ALTER TABLE active_work ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'`
     );
   }
+  for (const col of V2_COLUMNS) {
+    if (!names.has(col.name)) {
+      db.exec(`ALTER TABLE active_work ADD COLUMN ${col.name} ${col.ddl}`);
+    }
+  }
+  backfillCreatedAt(db);
+  backfillStatusKeys(db);
 }
 
 function collectTagsFromDb(db: Database.Database): string[] {
@@ -264,7 +373,8 @@ export function loadTodosFromDb(): ParsedSessionTodo[] {
   const hidden = sessionHiddenIds();
   const rows = db
     .prepare(
-      "SELECT * FROM active_work ORDER BY sort_order ASC, updated_at DESC"
+      `SELECT * FROM active_work
+       ORDER BY pinned DESC, priority DESC, sort_order ASC, updated_at DESC`
     )
     .all() as DbRow[];
   return rows.map((row) => {
@@ -337,6 +447,209 @@ export function reorderTasksInDb(orderIds: string[]): boolean {
   return true;
 }
 
+function loadOpenParentLinks(
+  db: Database.Database
+): { id: string; parent_id: string | null }[] {
+  return db
+    .prepare(
+      `SELECT id, parent_id FROM active_work WHERE done = 0
+       ORDER BY pinned DESC, priority DESC, sort_order ASC, updated_at DESC`
+    )
+    .all() as { id: string; parent_id: string | null }[];
+}
+
+function loadOpenOrderIds(db: Database.Database): string[] {
+  return loadOpenParentLinks(db).map((r) => r.id);
+}
+
+function applyDragGroupSync(
+  db: Database.Database,
+  childId: string,
+  sync: TaskDragGroupSync | undefined
+): void {
+  if (!sync) {
+    return;
+  }
+  const ts = nowIso();
+  const sets: string[] = ["updated_at = @updated_at"];
+  const params: Record<string, string | null> = {
+    id: childId,
+    updated_at: ts,
+  };
+  if (sync.repo !== undefined) {
+    sets.push("repo = @repo");
+    const trimmed =
+      typeof sync.repo === "string" ? sync.repo.trim() : sync.repo;
+    params.repo =
+      trimmed && VALID_REPOS.has(trimmed) ? trimmed : null;
+  }
+  if (sync.status !== undefined) {
+    sets.push("status = @status");
+    params.status = sync.status.trim();
+  }
+  if (sync.status_key !== undefined) {
+    sets.push("status_key = @status_key");
+    params.status_key = normalizeStatusKey(sync.status_key);
+  }
+  if (sets.length <= 1) {
+    return;
+  }
+  db.prepare(
+    `UPDATE active_work SET ${sets.join(", ")} WHERE id = @id`
+  ).run(params);
+}
+
+export function nestTaskUnderInDb(
+  childId: string,
+  parentId: string,
+  groupSync?: TaskDragGroupSync
+): boolean {
+  if (childId === parentId) {
+    return false;
+  }
+  const db = openActiveTasksDb();
+  const child = db
+    .prepare("SELECT id, done FROM active_work WHERE id = ?")
+    .get(childId) as { id: string; done: number } | undefined;
+  const parent = db
+    .prepare("SELECT id, done FROM active_work WHERE id = ?")
+    .get(parentId) as { id: string; done: number } | undefined;
+  if (!child || child.done || !parent || parent.done) {
+    return false;
+  }
+  const links = loadOpenParentLinks(db);
+  const map = parentIdMap(links);
+  if (isUnderAncestor(map, parentId, childId)) {
+    return false;
+  }
+  const ts = nowIso();
+  db.prepare(
+    "UPDATE active_work SET parent_id = ?, updated_at = ? WHERE id = ?"
+  ).run(parentId, ts, childId);
+  applyDragGroupSync(db, childId, groupSync);
+  map.set(childId, parentId);
+  const order = loadOpenOrderIds(db);
+  const next = insertAfterSubtreeInOrder(order, parentId, childId, map);
+  reorderTasksInDb(next);
+  return true;
+}
+
+export function moveTaskSiblingInDb(
+  childId: string,
+  targetId: string,
+  after: boolean,
+  groupSync?: TaskDragGroupSync
+): boolean {
+  if (childId === targetId) {
+    return false;
+  }
+  const db = openActiveTasksDb();
+  const child = db
+    .prepare("SELECT id, done FROM active_work WHERE id = ?")
+    .get(childId) as { id: string; done: number } | undefined;
+  const target = db
+    .prepare("SELECT id, done, parent_id FROM active_work WHERE id = ?")
+    .get(targetId) as
+    | { id: string; done: number; parent_id: string | null }
+    | undefined;
+  if (!child || child.done || !target || target.done) {
+    return false;
+  }
+  const newParent = target.parent_id?.trim() || null;
+  if (newParent) {
+    const parentRow = db
+      .prepare("SELECT id, done FROM active_work WHERE id = ?")
+      .get(newParent) as { id: string; done: number } | undefined;
+    if (!parentRow || parentRow.done) {
+      return false;
+    }
+    const links = loadOpenParentLinks(db);
+    const map = parentIdMap(links);
+    map.set(childId, newParent);
+    if (isUnderAncestor(map, newParent, childId)) {
+      return false;
+    }
+  }
+  const ts = nowIso();
+  db.prepare(
+    "UPDATE active_work SET parent_id = ?, updated_at = ? WHERE id = ?"
+  ).run(newParent, ts, childId);
+  applyDragGroupSync(db, childId, groupSync);
+  const order = loadOpenOrderIds(db).filter((id) => id !== childId);
+  let idx = order.indexOf(targetId);
+  if (idx < 0) {
+    order.push(childId);
+  } else {
+    if (after) {
+      idx += 1;
+    }
+    order.splice(idx, 0, childId);
+  }
+  reorderTasksInDb(order);
+  return true;
+}
+
+export function moveTaskToSectionInDb(
+  childId: string,
+  groupSync: TaskDragGroupSync
+): boolean {
+  const db = openActiveTasksDb();
+  const child = db
+    .prepare("SELECT id, done FROM active_work WHERE id = ?")
+    .get(childId) as { id: string; done: number } | undefined;
+  if (!child || child.done) {
+    return false;
+  }
+  const ts = nowIso();
+  db.prepare(
+    "UPDATE active_work SET parent_id = NULL, updated_at = ? WHERE id = ?"
+  ).run(ts, childId);
+  applyDragGroupSync(db, childId, groupSync);
+  const order = loadOpenOrderIds(db).filter((id) => id !== childId);
+  order.push(childId);
+  reorderTasksInDb(order);
+  return true;
+}
+
+/** Pin or unpin a row and reorder so pinned tasks stay in the Pinned section (top of open list). */
+export function setTaskPinnedInDb(rowId: string, pinned: boolean): boolean {
+  const db = openActiveTasksDb();
+  const row = db
+    .prepare("SELECT id, done FROM active_work WHERE id = ?")
+    .get(rowId) as { id: string; done: number } | undefined;
+  if (!row || row.done) {
+    return false;
+  }
+  const openRows = db
+    .prepare(
+      `SELECT id, pinned FROM active_work WHERE done = 0
+       ORDER BY pinned DESC, sort_order ASC, updated_at DESC`
+    )
+    .all() as { id: string; pinned: number }[];
+  const without = openRows.map((r) => r.id).filter((id) => id !== rowId);
+  const pinnedIds = without.filter(
+    (id) => openRows.find((r) => r.id === id)?.pinned
+  );
+  const unpinnedIds = without.filter((id) => !pinnedIds.includes(id));
+  const newOrder = pinned
+    ? [rowId, ...pinnedIds, ...unpinnedIds]
+    : [...pinnedIds, rowId, ...unpinnedIds];
+  const ts = nowIso();
+  db.prepare(
+    "UPDATE active_work SET pinned = ?, updated_at = ? WHERE id = ?"
+  ).run(pinned ? 1 : 0, ts, rowId);
+  const update = db.prepare(
+    "UPDATE active_work SET sort_order = ?, updated_at = ? WHERE id = ?"
+  );
+  const tx = db.transaction((ids: string[]) => {
+    ids.forEach((id, index) => {
+      update.run(index, ts, id);
+    });
+  });
+  tx(newOrder);
+  return true;
+}
+
 export function updateTaskFieldsInDb(
   rowId: string,
   fields: TaskFieldUpdate
@@ -354,6 +667,52 @@ export function updateTaskFieldsInDb(
   }
   if (fields.status !== undefined) {
     next.status = fields.status.trim();
+    if (fields.status_key === undefined) {
+      next.status_key = inferStatusKeyFromLabel(next.status);
+    }
+  }
+  if (fields.status_key !== undefined) {
+    next.status_key = normalizeStatusKey(fields.status_key);
+  }
+  if (fields.priority !== undefined) {
+    next.priority = clampPriority(fields.priority);
+  }
+  if (fields.pinned !== undefined) {
+    next.pinned = fields.pinned ? 1 : 0;
+  }
+  if (fields.next_action !== undefined) {
+    next.next_action = fields.next_action.trim() || null;
+  }
+  if (fields.waiting_on !== undefined) {
+    next.waiting_on = fields.waiting_on.trim() || null;
+  }
+  if (fields.blocked_by_id !== undefined) {
+    const v = fields.blocked_by_id?.trim();
+    next.blocked_by_id = v || null;
+  }
+  if (fields.parent_id !== undefined) {
+    const v = fields.parent_id?.trim();
+    if (v && v === rowId) {
+      return false;
+    }
+    if (v) {
+      const parentRow = db
+        .prepare("SELECT id, done FROM active_work WHERE id = ?")
+        .get(v) as { id: string; done: number } | undefined;
+      if (!parentRow || parentRow.done) {
+        return false;
+      }
+      const links = loadOpenParentLinks(db);
+      const map = parentIdMap(links);
+      map.set(rowId, v);
+      if (isUnderAncestor(map, v, rowId)) {
+        return false;
+      }
+    }
+    next.parent_id = v || null;
+  }
+  if (fields.cloud_agent_id !== undefined) {
+    next.cloud_agent_id = fields.cloud_agent_id?.trim() || null;
   }
   if (fields.repo !== undefined) {
     const trimmed = fields.repo.trim();
@@ -377,12 +736,29 @@ export function updateTaskFieldsInDb(
   if (fields.tags !== undefined) {
     next.tags_json = JSON.stringify(sanitizeTags(fields.tags));
   }
+  if (fields.prs_json !== undefined) {
+    const raw = fields.prs_json.trim() || "[]";
+    parseJsonArray<TaskPr>(raw);
+    next.prs_json = raw;
+  }
+  if (fields.links_json !== undefined) {
+    const raw = fields.links_json.trim() || "[]";
+    parseJsonArray<TaskLink>(raw);
+    next.links_json = raw;
+  }
   next.updated_at = nowIso();
   db.prepare(`
     UPDATE active_work SET
-      title = @title, status = @status, repo = @repo, branch = @branch,
+      title = @title, status = @status, status_key = @status_key,
+      priority = @priority, pinned = @pinned,
+      next_action = @next_action, waiting_on = @waiting_on,
+      blocked_by_id = @blocked_by_id, parent_id = @parent_id,
+      cloud_agent_id = @cloud_agent_id,
+      repo = @repo, branch = @branch,
       worktree = @worktree, notes = @notes, pr_number = @pr_number,
-      pr_url = @pr_url, tags_json = @tags_json, updated_at = @updated_at
+      pr_url = @pr_url, tags_json = @tags_json,
+      prs_json = @prs_json, links_json = @links_json,
+      updated_at = @updated_at
     WHERE id = @id
   `).run(next);
   if (fields.tags !== undefined) {
@@ -393,17 +769,37 @@ export function updateTaskFieldsInDb(
 
 export function deleteTaskFromDb(rowId: string): boolean {
   const db = openActiveTasksDb();
+  db.prepare(
+    "UPDATE active_work SET parent_id = NULL, updated_at = ? WHERE parent_id = ?"
+  ).run(nowIso(), rowId);
   const result = db.prepare("DELETE FROM active_work WHERE id = ?").run(rowId);
   return result.changes > 0;
 }
 
-export function setTaskDoneInDb(rowId: string, done: boolean): boolean {
+export function setTaskDoneInDb(
+  rowId: string,
+  done: boolean,
+  reason: string | null = "manual"
+): boolean {
   const db = openActiveTasksDb();
+  const ts = nowIso();
   const result = db
     .prepare(
-      "UPDATE active_work SET done = ?, updated_at = ? WHERE id = ?"
+      `UPDATE active_work SET
+        done = ?, updated_at = ?,
+        done_at = CASE WHEN ? = 1 THEN ? ELSE NULL END,
+        done_reason = CASE WHEN ? = 1 THEN ? ELSE NULL END
+       WHERE id = ?`
     )
-    .run(done ? 1 : 0, nowIso(), rowId);
+    .run(
+      done ? 1 : 0,
+      ts,
+      done ? 1 : 0,
+      ts,
+      done ? 1 : 0,
+      reason,
+      rowId
+    );
   return result.changes > 0;
 }
 
@@ -424,19 +820,25 @@ export function insertWorkFromQuickAdd(
   const id = newId();
   const repoVal =
     typeof repo === "string" && repo.trim() ? repo.trim() : null;
+  const ts = nowIso();
+  const statusKey = inferStatusKeyFromLabel(trimmedStatus);
   db.prepare(`
     INSERT INTO active_work (
-      id, sort_order, title, status, repo, prs_json, links_json, done, updated_at
+      id, sort_order, title, status, status_key, priority, pinned,
+      created_at, repo, prs_json, links_json, tags_json, done, updated_at
     ) VALUES (
-      @id, @sort_order, @title, @status, @repo, '[]', '[]', 0, @updated_at
+      @id, @sort_order, @title, @status, @status_key, 1, 0,
+      @created_at, @repo, '[]', '[]', '[]', 0, @updated_at
     )
   `).run({
     id,
     sort_order: maxOrder.m + 1,
     title: trimmedTitle,
     status: trimmedStatus,
+    status_key: statusKey,
+    created_at: ts,
     repo: repoVal,
-    updated_at: nowIso(),
+    updated_at: ts,
   });
   return id;
 }
@@ -453,57 +855,35 @@ export function insertWorkFromOpenPr(pr: OpenGitHubPr): string | null {
       : pr.isDraft
         ? "draft PR"
         : "open PR";
+  const statusKey: StatusKey =
+    pr.relation === "review_requested" ? "review" : "progress";
+  const ts = nowIso();
   db.prepare(`
     INSERT INTO active_work (
-      id, sort_order, title, status, repo, pr_number, pr_url,
-      prs_json, links_json, done, updated_at
+      id, sort_order, title, status, status_key, priority, pinned,
+      created_at, repo, pr_number, pr_url,
+      prs_json, links_json, tags_json, done, updated_at
     ) VALUES (
-      @id, @sort_order, @title, @status, @repo, @pr_number, @pr_url,
-      '[]', '[]', 0, @updated_at
+      @id, @sort_order, @title, @status, @status_key, 1, 0,
+      @created_at, @repo, @pr_number, @pr_url,
+      '[]', '[]', '[]', 0, @updated_at
     )
   `).run({
     id,
     sort_order: maxOrder.m + 1,
     title: pr.title,
     status,
+    status_key: statusKey,
+    created_at: ts,
     repo: pr.repoKey,
     pr_number: pr.number,
     pr_url: pr.url,
-    updated_at: nowIso(),
+    updated_at: ts,
   });
   return id;
 }
 
-function prEntryKey(pr: TaskPr): string {
-  const url = pr.url?.trim();
-  if (url) {
-    return url;
-  }
-  const repo = pr.repo ?? "";
-  return `${repo}#${pr.number}`;
-}
-
-function appendPr(list: TaskPr[], entry: TaskPr, seen: Set<string>): void {
-  const key = prEntryKey(entry);
-  if (seen.has(key)) {
-    return;
-  }
-  seen.add(key);
-  list.push(entry);
-}
-
-function rowPrimaryAsPr(row: DbRow): TaskPr | null {
-  if (row.pr_number === null || !row.pr_url?.trim()) {
-    return null;
-  }
-  return {
-    number: row.pr_number,
-    url: row.pr_url.trim(),
-    repo: row.repo,
-  };
-}
-
-/** Fold related rows into one initiative (extra PRs → prs_json). */
+/** Nest related rows under one initiative (parent_id); keeps each row's own fields. */
 export function mergeWorkRowsIntoPrimary(
   primaryId: string,
   mergeIds: string[]
@@ -514,136 +894,40 @@ export function mergeWorkRowsIntoPrimary(
   }
   const db = openActiveTasksDb();
   const primary = db
-    .prepare("SELECT * FROM active_work WHERE id = ?")
-    .get(primaryId) as DbRow | undefined;
-  if (!primary) {
+    .prepare("SELECT id, done FROM active_work WHERE id = ?")
+    .get(primaryId) as { id: string; done: number } | undefined;
+  if (!primary || primary.done) {
     return false;
   }
 
-  const merge = db.transaction(() => {
-    let prs = parseJsonArray<TaskPr>(primary.prs_json);
-    const links = parseJsonArray<TaskLink>(primary.links_json);
-    const seenPr = new Set<string>();
-    for (const p of prs) {
-      seenPr.add(prEntryKey(p));
-    }
-    let prNumber = primary.pr_number;
-    let prUrl = primary.pr_url;
-    let repo = primary.repo;
-    let branch = primary.branch;
-    let worktree = primary.worktree;
-    let notes = primary.notes?.trim() ?? "";
-    let sortOrder = primary.sort_order;
-    const linkSeen = new Set(links.map((l) => l.url.trim()));
-    const tagKeys = new Set<string>();
-    const mergedTags: string[] = [];
-    const addTag = (tag: string): void => {
-      const key = tag.toLowerCase();
-      if (tagKeys.has(key)) {
-        return;
-      }
-      tagKeys.add(key);
-      mergedTags.push(tag);
-    };
-    for (const t of parseTagsJson(primary.tags_json ?? "[]")) {
-      addTag(t);
-    }
+  const nest = db.transaction(() => {
+    const links = loadOpenParentLinks(db);
+    const map = parentIdMap(links);
+    let order = loadOpenOrderIds(db);
+    const ts = nowIso();
 
     for (const sourceId of sources) {
       const row = db
-        .prepare("SELECT * FROM active_work WHERE id = ?")
-        .get(sourceId) as DbRow | undefined;
-      if (!row) {
+        .prepare("SELECT id, done FROM active_work WHERE id = ?")
+        .get(sourceId) as { id: string; done: number } | undefined;
+      if (!row || row.done) {
         continue;
       }
-      sortOrder = Math.min(sortOrder, row.sort_order);
-
-      for (const p of parseJsonArray<TaskPr>(row.prs_json)) {
-        appendPr(prs, p, seenPr);
+      if (isUnderAncestor(map, primaryId, sourceId)) {
+        throw new Error("merge would create a parent cycle");
       }
-      const sourcePrimary = rowPrimaryAsPr(row);
-      if (sourcePrimary) {
-        if (prNumber === null) {
-          prNumber = row.pr_number;
-          prUrl = row.pr_url;
-        } else {
-          appendPr(prs, sourcePrimary, seenPr);
-        }
-      }
-
-      if (!repo && row.repo) {
-        repo = row.repo;
-      }
-      if (!branch?.trim() && row.branch?.trim()) {
-        branch = row.branch.trim();
-      }
-      if (!worktree?.trim() && row.worktree?.trim()) {
-        worktree = row.worktree.trim();
-      }
-      const extraNotes = row.notes?.trim();
-      if (extraNotes && !notes.includes(extraNotes)) {
-        notes = notes ? `${notes}\n${extraNotes}` : extraNotes;
-      }
-      for (const link of parseJsonArray<TaskLink>(row.links_json)) {
-        const u = link.url?.trim();
-        if (u && !linkSeen.has(u)) {
-          linkSeen.add(u);
-          links.push(link);
-        }
-      }
-      for (const tag of parseTagsJson(row.tags_json ?? "[]")) {
-        addTag(tag);
-      }
-
-      db.prepare("DELETE FROM session_hidden WHERE work_id = ?").run(sourceId);
-      db.prepare("DELETE FROM active_work WHERE id = ?").run(sourceId);
+      db.prepare(
+        "UPDATE active_work SET parent_id = ?, updated_at = ? WHERE id = ?"
+      ).run(primaryId, ts, sourceId);
+      map.set(sourceId, primaryId);
+      order = insertAfterSubtreeInOrder(order, primaryId, sourceId, map);
     }
 
-    if (prNumber !== null && prUrl) {
-      const trimmedUrl = prUrl.trim();
-      prs = prs.filter(
-        (p) =>
-          !(
-            p.number === prNumber &&
-            p.url.trim() === trimmedUrl &&
-            (p.repo === repo || !p.repo || !repo)
-          )
-      );
-    }
-
-    db.prepare(`
-      UPDATE active_work SET
-        sort_order = @sort_order,
-        repo = @repo,
-        branch = @branch,
-        worktree = @worktree,
-        notes = @notes,
-        pr_number = @pr_number,
-        pr_url = @pr_url,
-        prs_json = @prs_json,
-        links_json = @links_json,
-        tags_json = @tags_json,
-        updated_at = @updated_at
-      WHERE id = @id
-    `).run({
-      id: primaryId,
-      sort_order: sortOrder,
-      repo,
-      branch,
-      worktree,
-      notes: notes || null,
-      pr_number: prNumber,
-      pr_url: prUrl,
-      prs_json: JSON.stringify(prs),
-      links_json: JSON.stringify(links),
-      tags_json: JSON.stringify(sanitizeTags(mergedTags)),
-      updated_at: nowIso(),
-    });
+    reorderTasksInDb(order);
   });
 
   try {
-    merge();
-    refreshTagVocab();
+    nest();
     return true;
   } catch {
     return false;

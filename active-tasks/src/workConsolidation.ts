@@ -200,7 +200,7 @@ export function buildAgentConsolidationBrief(
     mergeCli,
     "```",
     "",
-    "Pick PRIMARY as the row to keep (best title/status); extra PRs land in `prs_json`. Re-run `items` and trim to 3–8 rows.",
+    "Pick PRIMARY as the initiative row; selected rows become **nested subtasks** (`parent_id`). Each row keeps its own PRs, tags, and notes.",
     "",
     "### Rows",
     lines.length ? lines.join("\n") : "(none open)",

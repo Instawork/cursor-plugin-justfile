@@ -111,7 +111,22 @@ test("insert, load, and tag vocab", () => {
   });
 });
 
-test("mergeWorkRowsIntoPrimary merges tags and extra PRs", () => {
+test("setTaskPinnedInDb moves row to pinned section order", () => {
+  withTempDb(({ store }) => {
+    const a = store.insertWorkFromQuickAdd("First", "in progress", "finch");
+    const b = store.insertWorkFromQuickAdd("Second", "in progress", "finch");
+    assert.ok(a && b);
+    assert.ok(store.setTaskPinnedInDb(b, true));
+    const rows = store.loadTodosFromDb();
+    assert.equal(rows[0].id, b);
+    assert.equal(rows[0].pinned, true);
+    assert.ok(store.setTaskPinnedInDb(b, false));
+    const rows2 = store.loadTodosFromDb();
+    assert.equal(rows2[0].pinned, false);
+  });
+});
+
+test("mergeWorkRowsIntoPrimary nests rows under primary", () => {
   withTempDb(({ store }) => {
     const a = store.insertWorkFromQuickAdd("Initiative A", "open PR", "instawork");
     const b = store.insertWorkFromQuickAdd("Initiative B", "review", "finch");
@@ -125,9 +140,13 @@ test("mergeWorkRowsIntoPrimary merges tags and extra PRs", () => {
     assert.ok(store.mergeWorkRowsIntoPrimary(a, [b]));
     store.closeActiveTasksDb();
     const rows = store.loadTodosFromDb();
-    assert.equal(rows.length, 1);
-    assert.deepEqual(rows[0].tags?.sort(), ["deploy", "finch-side"].sort());
-    assert.equal(rows[0].pr_number, 100);
+    assert.equal(rows.length, 2);
+    const parent = rows.find((r) => r.id === a);
+    const child = rows.find((r) => r.id === b);
+    assert.equal(child?.parent_id, a);
+    assert.deepEqual(parent?.tags, ["deploy"]);
+    assert.deepEqual(child?.tags, ["finch-side"]);
+    assert.equal(parent?.pr_number, 100);
   });
 });
 
@@ -205,4 +224,24 @@ test("structural merge suggestions ignore title-only overlap", () => {
 test("sanitizeTags normalizes and dedupes", () => {
   const { sanitizeTags } = loadTagsUtil();
   assert.deepEqual(sanitizeTags(["  Foo ", "foo", "Bar"]), ["Foo", "Bar"]);
+});
+
+test("nest and move sibling update parent_id and order", () => {
+  withTempDb(({ store }) => {
+    store.openActiveTasksDb();
+    const a = store.insertWorkFromQuickAdd("Parent", "in progress");
+    const b = store.insertWorkFromQuickAdd("Child", "ready");
+    const c = store.insertWorkFromQuickAdd("Sibling", "ready");
+    assert.ok(a && b && c);
+    assert.ok(store.nestTaskUnderInDb(b, a));
+    let todos = store.loadTodosFromDb().filter((t) => !t.done);
+    const byId = new Map(todos.map((t) => [t.id, t]));
+    assert.equal(byId.get(b).parent_id, a);
+    const order = todos.map((t) => t.id);
+    assert.ok(order.indexOf(b) > order.indexOf(a));
+    assert.ok(!store.nestTaskUnderInDb(a, b));
+    assert.ok(store.moveTaskSiblingInDb(b, c, true));
+    todos = store.loadTodosFromDb().filter((t) => !t.done);
+    assert.ok(!todos.find((t) => t.id === b)?.parent_id);
+  });
 });

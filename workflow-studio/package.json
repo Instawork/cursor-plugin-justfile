@@ -1,0 +1,114 @@
+{
+  "name": "workflow-studio",
+  "displayName": "Workflow Studio",
+  "description": "Inspect Mermaid workflows and edit node-bound Markdown prompts.",
+  "version": "0.1.3",
+  "publisher": "cursorworkflowstudio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Instawork/cursor-plugins.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCustomEditor:workflowStudio.editor",
+    "onCommand:workflowStudio.open",
+    "onCommand:workflowStudio.openFile"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "workflowStudio.editor",
+        "displayName": "Workflow Studio",
+        "selector": [
+          {
+            "filenamePattern": "*.mmd"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "workflowStudio.open",
+        "title": "Open in Workflow Studio",
+        "category": "Workflow Studio",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "workflowStudio.openFile",
+        "title": "Open Workflow File…",
+        "category": "Workflow Studio",
+        "icon": "$(file-code)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "workflowStudio.open"
+        },
+        {
+          "command": "workflowStudio.openFile"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "workflowStudio.open",
+          "when": "resourceExtname == .mmd",
+          "group": "navigation@9"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "workflowStudio.open",
+          "when": "resourceExtname == .mmd && !activeCustomEditorId",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "workflowStudio.open",
+          "when": "resourceExtname == .mmd",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Workflow Studio",
+      "properties": {
+        "workflowStudio.autosaveDelay": {
+          "type": "number",
+          "default": 400,
+          "minimum": 100,
+          "maximum": 5000,
+          "scope": "resource",
+          "description": "Milliseconds to wait after prompt edits before saving."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "copy:mermaid": "node scripts/copy-mermaid.mjs",
+    "compile": "tsc -p ./ && npm run copy:mermaid",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test test/directives.mjs test/pathSafety.mjs",
+    "vscode:prepublish": "npm run compile",
+    "vsix": "npm run compile && npm test && vsce package --no-dependencies --allow-missing-repository"
+  },
+  "dependencies": {
+    "mermaid": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.32.0",
+    "typescript": "^5.4.0"
+  }
+}

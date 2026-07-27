@@ -2,7 +2,7 @@
   "name": "active-tasks",
   "displayName": "Active Tasks",
   "description": "Sidebar for active work (SQLite) with GitHub/cloud reconcile and PR CI status.",
-  "version": "0.3.12",
+  "version": "0.3.24",
   "publisher": "cursoractivetasks",
   "repository": {
     "type": "git",
@@ -23,10 +23,26 @@
     "onCommand:activeTasks.refresh",
     "onCommand:activeTasks.installHooks",
     "onCommand:activeTasks.openDatabase",
-    "onCommand:activeTasks.consolidateWithAgent"
+    "onCommand:activeTasks.consolidateWithAgent",
+    "onCommand:activeTasks.resetReconcileBaseline"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Active Tasks",
+      "properties": {
+        "activeTasks.reconcile.backfill": {
+          "type": "boolean",
+          "default": false,
+          "description": "When enabled, reconcile shows all untracked open PRs and cloud agents. When disabled (default), only items updated after the reconcile baseline are surfaced (no historical backfill)."
+        },
+        "activeTasks.reconcile.includeReviewRequested": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include GitHub PRs where you are requested as a reviewer in the reconcile feed."
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -92,6 +108,11 @@
         "title": "Copy Active Work Consolidation Brief for Agent",
         "category": "Active Tasks",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "activeTasks.resetReconcileBaseline",
+        "title": "Reset Reconcile Feed Baseline (Now)",
+        "category": "Active Tasks"
       }
     ],
     "menus": {
@@ -143,14 +164,17 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "vsix": "npm run compile && npm test && node scripts/verify-smoke.mjs && vsce package --allow-missing-repository",
-    "test": "npm run compile && node --test test/integration/*.mjs"
+    "rebuild:native": "node scripts/rebuild-native.mjs",
+    "rebuild:system": "npm rebuild better-sqlite3",
+    "vsix": "npm run compile && npm run rebuild:system && npm test && node scripts/verify-smoke.mjs && npm run rebuild:native && vsce package --allow-missing-repository",
+    "test": "npm run compile && node --test test/integration/store.integration.mjs test/reconcileFeed.mjs test/tagsUtil.mjs test/statusKeyUtil.mjs test/statusBar.mjs"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.23",
-    "better-sqlite3": "^11.10.0"
+    "better-sqlite3": "^12.11.1"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",

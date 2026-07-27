@@ -19,7 +19,11 @@ except ModuleNotFoundError:
 
 DEFAULT_DB = Path.home() / "code/cursor-contexts/active-tasks.sqlite"
 DEFAULT_TOML = Path.home() / "code/cursor-contexts/active-tasks.toml"
+SCHEMA_VERSION = 2
 VALID_REPOS = frozenset({"instawork", "finch", "infrastructure"})
+VALID_STATUS_KEYS = frozenset(
+    {"blocked", "review", "progress", "ready", "paused", "other"}
+)
 
 
 class ActiveTasksValidationError(ValueError):
@@ -76,9 +80,29 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute(
-        "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1')"
+        "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
+        (str(SCHEMA_VERSION),),
+    )
+    conn.execute(
+        "UPDATE meta SET value = ? WHERE key = 'schema_version' AND CAST(value AS INTEGER) < ?",
+        (str(SCHEMA_VERSION), SCHEMA_VERSION),
     )
     _migrate_columns(conn)
+
+
+def _infer_status_key(status: str) -> str:
+    s = status.lower()
+    if any(x in s for x in ("block", "fail", "red", "tach")):
+        return "blocked"
+    if any(x in s for x in ("review", "duncan", "waiting")):
+        return "review"
+    if any(x in s for x in ("progress", "step", "walkthrough", "active branch")):
+        return "progress"
+    if any(x in s for x in ("ready", "green", "merge", "ci green", "pushed")):
+        return "ready"
+    if "pause" in s:
+        return "paused"
+    return "other"
 
 
 def _migrate_columns(conn: sqlite3.Connection) -> None:
@@ -87,6 +111,38 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE active_work ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'"
         )
+    v2 = [
+        ("status_key", "TEXT NOT NULL DEFAULT 'other'"),
+        ("priority", "INTEGER NOT NULL DEFAULT 1"),
+        ("pinned", "INTEGER NOT NULL DEFAULT 0"),
+        ("next_action", "TEXT"),
+        ("waiting_on", "TEXT"),
+        ("blocked_by_id", "TEXT"),
+        ("parent_id", "TEXT"),
+        ("cloud_agent_id", "TEXT"),
+        ("created_at", "TEXT"),
+        ("done_at", "TEXT"),
+        ("done_reason", "TEXT"),
+    ]
+    for name, ddl in v2:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE active_work ADD COLUMN {name} {ddl}")
+    conn.execute(
+        """
+        UPDATE active_work
+        SET created_at = updated_at
+        WHERE created_at IS NULL OR TRIM(created_at) = ''
+        """
+    )
+    for row in conn.execute("SELECT id, status, status_key FROM active_work"):
+        if row[2] and row[2] != "other":
+            continue
+        inferred = _infer_status_key(str(row[1]))
+        if inferred != "other":
+            conn.execute(
+                "UPDATE active_work SET status_key = ? WHERE id = ?",
+                (inferred, row[0]),
+            )
     conn.commit()
 
 
@@ -239,9 +295,23 @@ def row_to_item(row: sqlite3.Row) -> dict[str, Any]:
         "label": label,
         "title": row["title"],
         "status": row["status"],
+        "status_key": row["status_key"] if "status_key" in row.keys() else "other",
+        "priority": row["priority"] if "priority" in row.keys() else 1,
+        "pinned": bool(row["pinned"]) if "pinned" in row.keys() else False,
         "repo": row["repo"],
         "done": bool(row["done"]),
     }
+    for optional in (
+        "next_action",
+        "waiting_on",
+        "blocked_by_id",
+        "parent_id",
+        "cloud_agent_id",
+        "created_at",
+        "updated_at",
+    ):
+        if optional in row.keys() and row[optional]:
+            item[optional] = row[optional]
     if row["pr_number"] is not None:
         item["pr_number"] = row["pr_number"]
     if row["pr_url"]:
@@ -273,7 +343,7 @@ def list_items() -> list[dict[str, Any]]:
             for r in conn.execute("SELECT work_id FROM session_hidden").fetchall()
         }
         rows = conn.execute(
-            "SELECT * FROM active_work ORDER BY sort_order ASC, updated_at DESC"
+            "SELECT * FROM active_work ORDER BY pinned DESC, priority DESC, sort_order ASC, updated_at DESC"
         ).fetchall()
         items = [row_to_item(r) for r in rows]
         for item in items:
@@ -409,15 +479,64 @@ def import_toml_if_empty(toml_path: Path | None = None) -> int:
         conn.close()
 
 
-def _pr_key(pr: dict[str, Any]) -> str:
-    url = pr.get("url")
-    if isinstance(url, str) and url.strip():
-        return url.strip()
-    repo = pr.get("repo") or ""
-    return f"{repo}#{pr.get('number')}"
+def _open_order_ids(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute(
+        """
+        SELECT id FROM active_work WHERE done = 0
+        ORDER BY pinned DESC, priority DESC, sort_order ASC, updated_at DESC
+        """
+    ).fetchall()
+    return [str(r["id"]) for r in rows]
+
+
+def _parent_map(conn: sqlite3.Connection) -> dict[str, str | None]:
+    rows = conn.execute(
+        "SELECT id, parent_id FROM active_work WHERE done = 0"
+    ).fetchall()
+    out: dict[str, str | None] = {}
+    for r in rows:
+        pid = r["parent_id"]
+        if isinstance(pid, str) and pid.strip():
+            out[str(r["id"])] = pid.strip()
+        else:
+            out[str(r["id"])] = None
+    return out
+
+
+def _is_under_ancestor(
+    parent_map: dict[str, str | None], node_id: str, ancestor_id: str
+) -> bool:
+    cur: str | None = node_id
+    while cur:
+        if cur == ancestor_id:
+            return True
+        cur = parent_map.get(cur)
+    return False
+
+
+def _insert_after_subtree(
+    order: list[str],
+    parent_id: str,
+    child_id: str,
+    parent_map: dict[str, str | None],
+) -> list[str]:
+    without = [x for x in order if x != child_id]
+    try:
+        idx = without.index(parent_id)
+    except ValueError:
+        without.append(child_id)
+        return without
+    end = idx + 1
+    while end < len(without) and _is_under_ancestor(
+        parent_map, without[end], parent_id
+    ):
+        end += 1
+    without.insert(end, child_id)
+    return without
 
 
 def merge_work_rows(primary_id: str, *merge_ids: str) -> bool:
+    """Nest merge rows under primary via parent_id (rows are kept)."""
     sources = [m for m in merge_ids if m and m != primary_id]
     if not sources:
         return False
@@ -425,121 +544,32 @@ def merge_work_rows(primary_id: str, *merge_ids: str) -> bool:
     try:
         ensure_schema(conn)
         primary = conn.execute(
-            "SELECT * FROM active_work WHERE id = ?", (primary_id,)
+            "SELECT id, done FROM active_work WHERE id = ?", (primary_id,)
         ).fetchone()
-        if primary is None:
+        if primary is None or primary["done"]:
             return False
-        prs: list[Any] = json.loads(primary["prs_json"] or "[]")
-        links: list[Any] = json.loads(primary["links_json"] or "[]")
-        seen_pr = {_pr_key(p) for p in prs if isinstance(p, dict)}
-        link_seen = {
-            str(l.get("url", "")).strip()
-            for l in links
-            if isinstance(l, dict) and l.get("url")
-        }
-        pr_number = primary["pr_number"]
-        pr_url = primary["pr_url"]
-        repo = primary["repo"]
-        branch = primary["branch"]
-        worktree = primary["worktree"]
-        notes = (primary["notes"] or "").strip()
-        sort_order = primary["sort_order"]
-        tag_keys: set[str] = set()
-        merged_tags: list[str] = []
-
-        def add_tag(tag: str) -> None:
-            key = tag.lower()
-            if key in tag_keys:
-                return
-            tag_keys.add(key)
-            merged_tags.append(tag)
-
-        for t in _parse_tags_json(primary["tags_json"]):
-            add_tag(t)
-
+        parent_map = _parent_map(conn)
+        order = _open_order_ids(conn)
+        ts = datetime.now(timezone.utc).isoformat()
         for source_id in sources:
             row = conn.execute(
-                "SELECT * FROM active_work WHERE id = ?", (source_id,)
+                "SELECT id, done FROM active_work WHERE id = ?", (source_id,)
             ).fetchone()
-            if row is None:
+            if row is None or row["done"]:
                 continue
-            sort_order = min(sort_order, row["sort_order"])
-            for p in json.loads(row["prs_json"] or "[]"):
-                if not isinstance(p, dict):
-                    continue
-                k = _pr_key(p)
-                if k not in seen_pr:
-                    seen_pr.add(k)
-                    prs.append(p)
-            if row["pr_number"] is not None and row["pr_url"]:
-                entry = {
-                    "number": row["pr_number"],
-                    "url": row["pr_url"].strip(),
-                    "repo": row["repo"],
-                }
-                k = _pr_key(entry)
-                if pr_number is None:
-                    pr_number = row["pr_number"]
-                    pr_url = row["pr_url"]
-                elif k not in seen_pr:
-                    seen_pr.add(k)
-                    prs.append(entry)
-            if not repo and row["repo"]:
-                repo = row["repo"]
-            if not (branch or "").strip() and (row["branch"] or "").strip():
-                branch = row["branch"].strip()
-            if not (worktree or "").strip() and (row["worktree"] or "").strip():
-                worktree = row["worktree"].strip()
-            extra = (row["notes"] or "").strip()
-            if extra and extra not in notes:
-                notes = f"{notes}\n{extra}".strip() if notes else extra
-            for link in json.loads(row["links_json"] or "[]"):
-                if not isinstance(link, dict):
-                    continue
-                u = str(link.get("url", "")).strip()
-                if u and u not in link_seen:
-                    link_seen.add(u)
-                    links.append(link)
-            for t in _parse_tags_json(row["tags_json"]):
-                add_tag(t)
-            conn.execute("DELETE FROM session_hidden WHERE work_id = ?", (source_id,))
-            conn.execute("DELETE FROM active_work WHERE id = ?", (source_id,))
-
-        if pr_number is not None and pr_url:
-            trimmed = pr_url.strip()
-            prs = [
-                p
-                for p in prs
-                if not (
-                    isinstance(p, dict)
-                    and p.get("number") == pr_number
-                    and str(p.get("url", "")).strip() == trimmed
-                )
-            ]
-
-        ts = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            """
-            UPDATE active_work SET
-              sort_order = ?, repo = ?, branch = ?, worktree = ?, notes = ?,
-              pr_number = ?, pr_url = ?, prs_json = ?, links_json = ?, tags_json = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (
-                sort_order,
-                repo,
-                branch,
-                worktree,
-                notes or None,
-                pr_number,
-                pr_url,
-                json.dumps(prs),
-                json.dumps(links),
-                json.dumps(merged_tags),
-                ts,
-                primary_id,
-            ),
-        )
+            if _is_under_ancestor(parent_map, primary_id, source_id):
+                return False
+            conn.execute(
+                "UPDATE active_work SET parent_id = ?, updated_at = ? WHERE id = ?",
+                (primary_id, ts, source_id),
+            )
+            parent_map[source_id] = primary_id
+            order = _insert_after_subtree(order, primary_id, source_id, parent_map)
+        for idx, row_id in enumerate(order):
+            conn.execute(
+                "UPDATE active_work SET sort_order = ?, updated_at = ? WHERE id = ?",
+                (idx, ts, row_id),
+            )
         conn.commit()
         return True
     finally:

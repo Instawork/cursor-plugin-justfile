@@ -9,6 +9,8 @@ export type OpenGitHubPr = {
   repoKey: string | null;
   relation: "authored" | "review_requested";
   isDraft: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 const GITHUB_PR_URL =
@@ -64,6 +66,8 @@ type GhPrRow = {
   title: string;
   url: string;
   isDraft?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   repository?: { nameWithOwner?: string };
 };
 
@@ -103,14 +107,18 @@ function toOpenPr(
     repoKey: repoKeyFromNameWithOwner(nameWithOwner),
     relation,
     isDraft: Boolean(row.isDraft),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
-export async function fetchOpenGitHubPrs(): Promise<{
+export async function fetchOpenGitHubPrs(options?: {
+  includeReviewRequested?: boolean;
+}): Promise<{
   items: OpenGitHubPr[];
   error: string | null;
 }> {
-  const jsonFields = "number,title,url,repository,isDraft";
+  const jsonFields = "number,title,url,repository,isDraft,createdAt,updatedAt";
   const base = [
     "search",
     "prs",
@@ -120,11 +128,12 @@ export async function fetchOpenGitHubPrs(): Promise<{
     "--limit",
     "50",
   ];
+  const includeReview = options?.includeReviewRequested !== false;
   try {
-    const [authoredRaw, reviewRaw] = await Promise.all([
-      runGh([...base, "--author=@me"]),
-      runGh([...base, "--review-requested=@me"]),
-    ]);
+    const authoredRaw = await runGh([...base, "--author=@me"]);
+    const reviewRaw = includeReview
+      ? await runGh([...base, "--review-requested=@me"])
+      : "[]";
     const byUrl = new Map<string, OpenGitHubPr>();
     for (const row of parseRows(authoredRaw)) {
       const pr = toOpenPr(row, "authored");

@@ -1,6 +1,23 @@
 export type TaskPr = { number: number; repo?: string | null; url: string };
 export type TaskLink = { label: string; url: string };
 
+export type StatusKey =
+  | "blocked"
+  | "review"
+  | "progress"
+  | "ready"
+  | "paused"
+  | "other";
+
+export type DoneReason = "merged" | "abandoned" | "split" | "manual";
+
+/** Optional repo/status updates applied when dropping a task in grouped views. */
+export type TaskDragGroupSync = {
+  repo?: string | null;
+  status?: string;
+  status_key?: StatusKey;
+};
+
 export type ParsedSessionTodo = {
   id: string;
   label: string;
@@ -8,6 +25,18 @@ export type ParsedSessionTodo = {
   repo?: string | null;
   title?: string;
   status?: string;
+  status_key?: StatusKey;
+  priority?: number;
+  pinned?: boolean;
+  next_action?: string;
+  waiting_on?: string;
+  blocked_by_id?: string | null;
+  parent_id?: string | null;
+  cloud_agent_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  done_at?: string;
+  done_reason?: DoneReason;
   pr_number?: number;
   pr_url?: string;
   branch?: string;
@@ -21,6 +50,14 @@ export type ParsedSessionTodo = {
 export type TaskFieldUpdate = {
   title?: string;
   status?: string;
+  status_key?: StatusKey;
+  priority?: number;
+  pinned?: boolean;
+  next_action?: string;
+  waiting_on?: string;
+  blocked_by_id?: string | null;
+  parent_id?: string | null;
+  cloud_agent_id?: string | null;
   repo?: string;
   branch?: string;
   worktree?: string;
@@ -28,6 +65,8 @@ export type TaskFieldUpdate = {
   pr_number?: number | null;
   pr_url?: string;
   tags?: string[];
+  prs_json?: string;
+  links_json?: string;
 };
 
 type ActiveWorkRow = Record<string, unknown>;
