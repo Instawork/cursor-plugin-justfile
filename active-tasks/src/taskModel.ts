@@ -5,11 +5,54 @@ export type StatusKey =
   | "blocked"
   | "review"
   | "progress"
-  | "ready"
-  | "paused"
-  | "other";
+  | "prioritized"
+  | "backlog";
 
-export type DoneReason = "merged" | "abandoned" | "split" | "manual";
+export type DoneReason =
+  | "merged"
+  | "abandoned"
+  | "split"
+  | "manual"
+  | "wont_fix";
+
+export const DONE_REASONS: readonly DoneReason[] = [
+  "merged",
+  "abandoned",
+  "split",
+  "manual",
+  "wont_fix",
+];
+
+const DONE_REASON_SET = new Set<string>(DONE_REASONS);
+
+export function isDoneReason(raw: string): raw is DoneReason {
+  return DONE_REASON_SET.has(raw);
+}
+
+export function normalizeDoneReason(raw: unknown): DoneReason {
+  if (typeof raw === "string" && isDoneReason(raw.trim().toLowerCase())) {
+    return raw.trim().toLowerCase() as DoneReason;
+  }
+  return "manual";
+}
+
+/** status_key values that mean "mark this row done", not an open bucket. */
+export function doneReasonForStatusKey(raw: unknown): DoneReason | null {
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const k = raw.trim().toLowerCase();
+  if (k === "done") {
+    return "manual";
+  }
+  if (k === "wont_fix") {
+    return "wont_fix";
+  }
+  return null;
+}
+
+/** @deprecated Prefer doneReasonForStatusKey */
+export const archiveReasonForStatusKey = doneReasonForStatusKey;
 
 /** Optional repo/status updates applied when dropping a task in grouped views. */
 export type TaskDragGroupSync = {
@@ -42,15 +85,27 @@ export type ParsedSessionTodo = {
   branch?: string;
   worktree?: string;
   notes?: string;
+  /** Where this row came from: a Slack permalink, PR URL, or mail link. */
+  source_url?: string;
+  /** slack | spark_mail | github | asana | manual */
+  stream_source?: string;
+  channel?: string;
+  /** ISO date (YYYY-MM-DD), not a timestamp. */
+  due?: string;
   prs?: TaskPr[];
   links?: TaskLink[];
   tags?: string[];
+  /** Living planning document owned by this row. */
+  spec?: string | null;
+  /** Own spec, or the nearest ancestor's spec. */
+  spec_effective?: string | null;
 };
 
 export type TaskFieldUpdate = {
   title?: string;
   status?: string;
-  status_key?: StatusKey;
+  /** Open buckets, or terminal done|wont_fix which finish the row. */
+  status_key?: StatusKey | "done" | "wont_fix";
   priority?: number;
   pinned?: boolean;
   next_action?: string;
@@ -62,6 +117,10 @@ export type TaskFieldUpdate = {
   branch?: string;
   worktree?: string;
   notes?: string;
+  source_url?: string;
+  stream_source?: string;
+  channel?: string;
+  due?: string;
   pr_number?: number | null;
   pr_url?: string;
   tags?: string[];

@@ -11,17 +11,25 @@ export function parentIdMap(rows: ParentLink[]): Map<string, string | null> {
   return map;
 }
 
-/** True if `nodeId` is the same as or nested under `ancestorId`. */
+/**
+ * True if `nodeId` is the same as or nested under `ancestorId`.
+ *
+ * The visited set is load-bearing: the table can already contain a parent cycle
+ * (an external writer, or a row edited outside the panel), and without it this
+ * walk never terminates and hangs the extension host.
+ */
 export function isUnderAncestor(
   parentMap: Map<string, string | null>,
   nodeId: string,
   ancestorId: string
 ): boolean {
+  const seen = new Set<string>();
   let cur: string | null = nodeId;
-  while (cur) {
+  while (cur && !seen.has(cur)) {
     if (cur === ancestorId) {
       return true;
     }
+    seen.add(cur);
     cur = parentMap.get(cur) ?? null;
   }
   return false;

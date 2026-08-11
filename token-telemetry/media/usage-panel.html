@@ -824,8 +824,30 @@
             td.appendChild(inner);
         }
 
+        let columnsPickerMounted = false;
+        let lastHeaderKeys = "";
+        let renderScheduled = false;
+
+        function scheduleRender() {
+            if (renderScheduled) return;
+            renderScheduled = true;
+            requestAnimationFrame(() => {
+                renderScheduled = false;
+                render();
+            });
+        }
+
         function renderColumnsPicker() {
             const list = document.getElementById("columnsList");
+            document.getElementById("columnsBtn").textContent = "Columns (" + visibleColumnKeys.length + "/" + ALL_COLUMNS.length + ")";
+            document.getElementById("columnsBtn").classList.toggle("active", columnsOpen);
+            if (columnsPickerMounted && list.childElementCount === ALL_COLUMNS.length) {
+                list.querySelectorAll("input[type=checkbox]").forEach((cb, i) => {
+                    const col = ALL_COLUMNS[i];
+                    if (col) cb.checked = visibleColumnKeys.includes(col.key);
+                });
+                return;
+            }
             list.replaceChildren();
             ALL_COLUMNS.forEach((col) => {
                 const row = document.createElement("label");
@@ -847,7 +869,7 @@
                     }
                     visibleColumnKeys = ALL_COLUMNS.map((c) => c.key).filter((k) => visibleColumnKeys.includes(k));
                     saveUiState();
-                    render();
+                    scheduleRender();
                 });
                 const text = document.createElement("span");
                 text.textContent = col.label;
@@ -855,11 +877,15 @@
                 row.appendChild(text);
                 list.appendChild(row);
             });
-            document.getElementById("columnsBtn").textContent = "Columns (" + visibleColumnKeys.length + "/" + ALL_COLUMNS.length + ")";
-            document.getElementById("columnsBtn").classList.toggle("active", columnsOpen);
+            columnsPickerMounted = true;
         }
 
         function renderTableHeader() {
+            const keys = visibleColumnKeys.join(",");
+            if (keys === lastHeaderKeys && document.getElementById("tableHead").childElementCount) {
+                return;
+            }
+            lastHeaderKeys = keys;
             const head = document.getElementById("tableHead");
             head.replaceChildren();
             const cols = ALL_COLUMNS.filter((c) => visibleColumnKeys.includes(c.key));
@@ -880,7 +906,7 @@
                 visibleColumnKeys = ALL_COLUMNS.map((c) => c.key);
             }
             saveUiState();
-            render();
+            scheduleRender();
         }
 
         const RECENT_PROMPT_BARS = 24;
@@ -1087,6 +1113,9 @@
             wrap.classList.toggle("collapsed", !insightsOpen);
             document.getElementById("insightsToggleBtn").textContent = insightsOpen ? "Hide" : "Show";
             document.getElementById("insightsBtn").classList.toggle("active", insightsOpen);
+            if (!insightsOpen) {
+                return;
+            }
             body.replaceChildren();
 
             const turns = recentAgentTurnsChron();
@@ -1188,33 +1217,33 @@
         document.getElementById("popOutBtn").onclick = () => vscode.postMessage({ type: "popOut" });
         document.getElementById("turnsOnly").onchange = () => {
             saveUiState();
-            render();
+            scheduleRender();
         };
         document.getElementById("columnsBtn").onclick = () => {
             columnsOpen = !columnsOpen;
             saveUiState();
-            render();
+            scheduleRender();
         };
         document.getElementById("colsCoreBtn").onclick = () => setColumnsMode("core");
         document.getElementById("colsAllBtn").onclick = () => setColumnsMode("all");
         document.getElementById("insightsBtn").onclick = () => {
             insightsOpen = !insightsOpen;
             saveUiState();
-            render();
+            scheduleRender();
         };
         document.getElementById("insightsToggleBtn").onclick = () => {
             insightsOpen = !insightsOpen;
             saveUiState();
-            render();
+            scheduleRender();
         };
 
         window.addEventListener("message", (e) => {
             if (e.data && e.data.type === "update") {
                 boot = e.data.payload;
-                render();
+                scheduleRender();
             }
         });
-        render();
+        scheduleRender();
     </script>
 </body>
 

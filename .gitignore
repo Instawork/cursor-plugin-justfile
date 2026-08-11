@@ -22,3 +22,14 @@ Thumbs.db
 # Local secrets (if you add tooling that reads env files)
 .env
 .env.local
+
+# Local editor preferences
+.cursor/settings.json
+.cursor/hooks/state/
+.vscode/settings.json
+
+# Scratch artifacts
+out.html
+/package-lock.json
+datadog-dd-extracted.md
+.history/

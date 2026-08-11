@@ -1,6 +1,7 @@
 import { spawnSync } from "child_process";
 import * as os from "os";
 import * as path from "path";
+import { isInsideWorktree } from "./paths";
 import { repoKeyFromNameWithOwner } from "./repoSlugs";
 
 export type WorkspaceMatch = {
@@ -44,15 +45,8 @@ export function todoMatchesWorkspace(
   },
   ctx: WorkspaceMatch
 ): boolean {
-  if (ctx.folder && todo.worktree) {
-    const wt = path.normalize(
-      todo.worktree.startsWith("~")
-        ? todo.worktree.replace(/^~/, os.homedir())
-        : path.resolve(todo.worktree)
-    );
-    if (ctx.folder === wt || ctx.folder.startsWith(wt + path.sep)) {
-      return true;
-    }
+  if (ctx.folder && todo.worktree && isInsideWorktree(ctx.folder, todo.worktree)) {
+    return true;
   }
   if (ctx.repoKey && todo.repo === ctx.repoKey) {
     if (!ctx.branch || !todo.branch) {

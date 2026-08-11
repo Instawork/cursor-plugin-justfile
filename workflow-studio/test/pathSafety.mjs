@@ -64,3 +64,56 @@ test("reports missing file when directory exists", async () => {
 test("exposes size cap constant", () => {
   assert.equal(MAX_PROMPT_BYTES, 2 * 1024 * 1024);
 });
+
+test("allowMissingDirs false rejects missing parent dir", async () => {
+  const { root, diagram } = await workspace();
+  const result = await resolvePromptTarget(diagram, "steps/nested/deep.md", [root]);
+  assert.equal(result.safe, false);
+  assert.match(result.reason || "", /does not exist/i);
+});
+
+test("allowMissingDirs true allows missing nested dirs inside root", async () => {
+  const { root, diagram } = await workspace();
+  const result = await resolvePromptTarget(diagram, "steps/nested/deep.md", [root], {
+    allowMissingDirs: true,
+  });
+  assert.equal(result.safe, true);
+  assert.equal(result.exists, false);
+});
+
+test("allowMissingDirs true still rejects secrets and escape", async () => {
+  const { root, diagram } = await workspace();
+  const secret = await resolvePromptTarget(diagram, "steps/nested/secret.md", [root], {
+    allowMissingDirs: true,
+  });
+  assert.equal(secret.safe, false);
+
+  const escape = await resolvePromptTarget(diagram, "../outside/x.md", [root], {
+    allowMissingDirs: true,
+  });
+  assert.equal(escape.safe, false);
+
+  const envFile = await resolvePromptTarget(diagram, "steps/.env.local", [root], {
+    allowMissingDirs: true,
+  });
+  assert.equal(envFile.safe, false);
+});
+
+test("allowMissingDirs true still rejects symlink escape", async () => {
+  const { root, diagram } = await workspace();
+  const outside = await mkdtemp(join(tmpdir(), "workflow-studio-out-"));
+  const outsideFile = join(outside, "leak.md");
+  await writeFile(outsideFile, "nope\n", "utf8");
+  await symlink(outsideFile, join(root, "steps", "leak2.md"));
+  const result = await resolvePromptTarget(diagram, "steps/leak2.md", [root], {
+    allowMissingDirs: true,
+  });
+  assert.equal(result.safe, false);
+});
+
+test("dotdot that resolves inside root is allowed when file exists", async () => {
+  const { root, diagram } = await workspace();
+  const result = await resolvePromptTarget(diagram, "steps/../steps/ok.md", [root]);
+  assert.equal(result.safe, true);
+  assert.equal(result.exists, true);
+});

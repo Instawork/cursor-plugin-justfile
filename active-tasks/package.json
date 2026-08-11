@@ -1,8 +1,8 @@
 {
   "name": "active-tasks",
   "displayName": "Active Tasks",
-  "description": "Sidebar for active work (SQLite) with GitHub/cloud reconcile and PR CI status.",
-  "version": "0.3.24",
+  "description": "Sidebar for active work (SQLite) with list and board views, per-row PR CI and git status.",
+  "version": "0.4.0",
   "publisher": "cursoractivetasks",
   "repository": {
     "type": "git",
@@ -23,26 +23,10 @@
     "onCommand:activeTasks.refresh",
     "onCommand:activeTasks.installHooks",
     "onCommand:activeTasks.openDatabase",
-    "onCommand:activeTasks.consolidateWithAgent",
-    "onCommand:activeTasks.resetReconcileBaseline"
+    "onCommand:activeTasks.consolidateWithAgent"
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "configuration": {
-      "title": "Active Tasks",
-      "properties": {
-        "activeTasks.reconcile.backfill": {
-          "type": "boolean",
-          "default": false,
-          "description": "When enabled, reconcile shows all untracked open PRs and cloud agents. When disabled (default), only items updated after the reconcile baseline are surfaced (no historical backfill)."
-        },
-        "activeTasks.reconcile.includeReviewRequested": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include GitHub PRs where you are requested as a reviewer in the reconcile feed."
-        }
-      }
-    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -79,7 +63,7 @@
       },
       {
         "command": "activeTasks.installHooks",
-        "title": "Install Cursor Hooks",
+        "title": "Install Active Tasks Hook",
         "category": "Active Tasks",
         "icon": "$(cloud-download)"
       },
@@ -108,11 +92,6 @@
         "title": "Copy Active Work Consolidation Brief for Agent",
         "category": "Active Tasks",
         "icon": "$(sparkle)"
-      },
-      {
-        "command": "activeTasks.resetReconcileBaseline",
-        "title": "Reset Reconcile Feed Baseline (Now)",
-        "category": "Active Tasks"
       }
     ],
     "menus": {
@@ -156,7 +135,7 @@
     "viewsWelcome": [
       {
         "view": "activeTasks.panel",
-        "contents": "Active work in `active-tasks.sqlite`. Reconcile PRs/cloud on refresh.\n[Install session hook](command:activeTasks.installHooks) · [Refresh](command:activeTasks.refresh)"
+        "contents": "Active work in `active-tasks.sqlite`. Refresh for PR CI and git chips.\n[Install Active Tasks hook](command:activeTasks.installHooks) · [Refresh](command:activeTasks.refresh)"
       }
     ]
   },
@@ -167,7 +146,7 @@
     "rebuild:native": "node scripts/rebuild-native.mjs",
     "rebuild:system": "npm rebuild better-sqlite3",
     "vsix": "npm run compile && npm run rebuild:system && npm test && node scripts/verify-smoke.mjs && npm run rebuild:native && vsce package --allow-missing-repository",
-    "test": "npm run compile && node --test test/integration/store.integration.mjs test/reconcileFeed.mjs test/tagsUtil.mjs test/statusKeyUtil.mjs test/statusBar.mjs"
+    "test": "npm run compile && node --test test/integration/store.integration.mjs test/installHooks.mjs test/tagsUtil.mjs test/statusKeyUtil.mjs test/statusBar.mjs test/taskNestUtil.mjs test/gitProbe.mjs test/planLink.mjs test/workConsolidation.mjs test/panelHtml.mjs"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.23",

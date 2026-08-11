@@ -15,11 +15,14 @@ import {
   setTaskDoneInDb,
   setTaskPinnedInDb,
   updateTaskFieldsInDb,
+  type InsertWorkResult,
 } from "./activeTasksStore";
-import type { TaskFieldUpdate, TaskDragGroupSync } from "./taskModel";
+import type { TaskFieldUpdate, TaskDragGroupSync, DoneReason } from "./taskModel";
+import { normalizeDoneReason } from "./taskModel";
 
 export type { TaskFieldUpdate, TaskLink, TaskPr, ParsedSessionTodo } from "./taskModel";
 export type { ParsedSessionTodo as SessionTodo } from "./taskModel";
+export type { InsertWorkResult } from "./activeTasksStore";
 
 export type ActiveTasksSnapshot = {
   updatedAt: string | null;
@@ -79,9 +82,10 @@ export function setTaskPinned(todoId: string, pinned: boolean): boolean {
 export function insertWorkFromQuickAdd(
   title: string,
   status: string,
-  repo?: string | null
-): string | null {
-  return insertWorkFromQuickAddInDb(title, status, repo);
+  repo?: string | null,
+  extras?: { branch?: string | null; worktree?: string | null }
+): InsertWorkResult {
+  return insertWorkFromQuickAddInDb(title, status, repo, extras);
 }
 
 export function updateTaskFields(
@@ -105,14 +109,16 @@ export function setTodoDone(todoId: string, done: boolean): boolean {
 
 export function setTodoDonePersistent(
   todoId: string,
-  mode: "session" | "remove" | "archive"
+  mode: "session" | "remove" | "done" | "archive",
+  reason: DoneReason | string | null = "manual"
 ): boolean {
   if (mode === "remove") {
     return deleteTaskFromDb(todoId);
   }
-  if (mode === "archive") {
+  // "archive" kept as a synonym for one webview reload after rename.
+  if (mode === "done" || mode === "archive") {
     setSessionHidden(todoId, false);
-    return setTaskDoneInDb(todoId, true);
+    return setTaskDoneInDb(todoId, true, normalizeDoneReason(reason));
   }
   return setSessionHidden(todoId, true);
 }

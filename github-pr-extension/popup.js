@@ -347,7 +347,7 @@ wireSectionToggle(els.inboxToggle, els.inboxBody);
 wireSectionToggle(els.pinnedToggle, els.pinnedBody);
 
 /** Latest PR lists for re-render after pin/dismiss (same fetch or cache pass). */
-let listSnapshot = { mineItems: [], inboxRawItems: [] };
+let listSnapshot = { mineItems: [], inboxRawItems: [], extraPinnedIssues: [] };
 
 /** URL → CI result, kept in memory so re-renders can re-apply badges without refetching. */
 const ciResultsMap = new Map();
@@ -691,27 +691,64 @@ function filterOutPinned(items, pinnedSet) {
   return items.filter((it) => it.html_url && !pinnedSet.has(it.html_url));
 }
 
+/**
+ * Fetch pinned URLs missing from search results.
+ * Open → keep and return issue data; closed/merged → drop; lookup failure → keep URL, hide.
+ * @returns {Promise<{ survivingUrls: string[], fetchedIssues: unknown[] }>}
+ */
+async function reconcileMissingPins(token, pinnedUrls, lookup) {
+  const results = await Promise.all(
+    pinnedUrls.map(async (url) => {
+      if (lookup.has(url)) {
+        return { url, keep: true, issue: null };
+      }
+      if (!token) {
+        return { url, keep: true, issue: null };
+      }
+      const info = parsePrInfo(url);
+      if (!info) {
+        return { url, keep: true, issue: null };
+      }
+      try {
+        const pr = await githubFetch(
+          `/repos/${info.owner}/${info.repo}/pulls/${info.number}`,
+          token
+        );
+        const state = String(pr.state || "").toLowerCase();
+        if (state !== "open") {
+          // Confirmed closed or merged — unpin.
+          return { url, keep: false, issue: null };
+        }
+        const issue = slimIssue(pr, {
+          repository_url: `https://api.github.com/repos/${info.owner}/${info.repo}`,
+          _section: "inbox",
+          _inboxReasons: [],
+        });
+        if (!issue.html_url) issue.html_url = url;
+        return { url, keep: true, issue };
+      } catch {
+        // Keep pin on failure (incl. permission 404); hide until next successful lookup.
+        return { url, keep: true, issue: null };
+      }
+    })
+  );
+
+  const survivingUrls = [];
+  const fetchedIssues = [];
+  for (const r of results) {
+    if (!r.keep) continue;
+    survivingUrls.push(r.url);
+    if (r.issue) fetchedIssues.push(r.issue);
+  }
+  return { survivingUrls, fetchedIssues };
+}
+
 function renderPinnedList(pinnedUrls, lookup, pinnedSet, onPinToggled) {
   els.pinnedList.replaceChildren();
   let shown = 0;
   for (const url of pinnedUrls) {
-    let issue = lookup.get(url);
-    let stale = false;
-    if (!issue) {
-      stale = true;
-      issue = {
-        html_url: url,
-        title: "(PR not in current results — open link)",
-        number: null,
-        user: null,
-        updated_at: null,
-        repository_url: "",
-        draft: false,
-        comments: 0,
-        state: "open",
-        _inboxReasons: [],
-      };
-    }
+    const issue = lookup.get(url);
+    if (!issue) continue;
     const reasons = issue._inboxReasons || (issue._inboxReason ? [issue._inboxReason] : []);
     const isMinePin = issue._section === "mine" && reasons.length === 0;
     const li = renderPrItem(issue, {
@@ -722,19 +759,12 @@ function renderPinnedList(pinnedUrls, lookup, pinnedSet, onPinToggled) {
       isMine: isMinePin,
       flatRepoHue: repoHue(fullRepoName(issue) || repoLabelFallback(issue) || "unknown"),
     });
-    if (stale) {
-      li.classList.add("pr-item-stale");
-      const hint = document.createElement("p");
-      hint.className = "pr-stale-hint";
-      hint.textContent = "Not in today’s API lists; link may still work.";
-      li.querySelector(".pr-main")?.appendChild(hint);
-    }
     els.pinnedList.appendChild(li);
     shown += 1;
   }
   els.pinnedCount.textContent = String(shown);
   els.pinnedEmpty.classList.toggle("hidden", shown > 0);
-  els.pinnedPanel.classList.toggle("hidden", pinnedUrls.length === 0);
+  els.pinnedPanel.classList.toggle("hidden", shown === 0);
 }
 
 function syncMineChrome() {
@@ -753,6 +783,7 @@ function syncInboxChrome() {
  * @param {object} params
  * @param {unknown[]} params.mineItems
  * @param {unknown[]} params.inboxRawItems inbox union before dismiss+pin filters (for pin lookup)
+ * @param {unknown[]} [params.extraPinnedIssues] open pins fetched outside search (lookup only)
  * @param {Set<string>} params.dismissed
  * @param {string[]} params.pinnedUrls
  * @param {Set<string>} params.pinnedSet
@@ -760,18 +791,25 @@ function syncInboxChrome() {
 function renderAllLists({
   mineItems,
   inboxRawItems,
+  extraPinnedIssues = [],
   dismissed,
   pinnedUrls,
   pinnedSet,
 }) {
-  listSnapshot = { mineItems, inboxRawItems };
+  listSnapshot = { mineItems, inboxRawItems, extraPinnedIssues };
   const lookup = issueByUrlMap(mineItems, inboxRawItems);
+  for (const it of extraPinnedIssues) {
+    if (it?.html_url && !lookup.has(it.html_url)) {
+      lookup.set(it.html_url, it);
+    }
+  }
 
   const onPinToggled = async () => {
     const [pinned, dis] = await Promise.all([getPinnedUrls(), getDismissedSet()]);
     renderAllLists({
       mineItems: listSnapshot.mineItems,
       inboxRawItems: listSnapshot.inboxRawItems,
+      extraPinnedIssues: listSnapshot.extraPinnedIssues || [],
       dismissed: dis,
       pinnedUrls: pinned,
       pinnedSet: new Set(pinned),
@@ -839,31 +877,11 @@ async function load() {
     els.pinnedList.replaceChildren();
     els.mineEmpty.classList.add("hidden");
     els.inboxEmpty.classList.add("hidden");
-    els.pinnedEmpty.classList.remove("hidden");
-    els.pinnedPanel.classList.toggle("hidden", pinnedUrlsRaw.length === 0);
+    els.pinnedEmpty.classList.add("hidden");
+    els.pinnedPanel.classList.add("hidden");
     els.mineCount.textContent = "0";
     els.inboxCount.textContent = "0";
-    els.pinnedCount.textContent = String(pinnedUrlsRaw.length);
-    if (pinnedUrlsRaw.length) {
-      listSnapshot = { mineItems: [], inboxRawItems: [] };
-      const lookupEmpty = new Map();
-      renderPinnedList(
-        pinnedUrlsRaw,
-        lookupEmpty,
-        pinnedSet,
-        async () => {
-          const [pinned, d] = await Promise.all([getPinnedUrls(), getDismissedSet()]);
-          renderAllLists({
-            mineItems: listSnapshot.mineItems,
-            inboxRawItems: listSnapshot.inboxRawItems,
-            dismissed: d,
-            pinnedUrls: pinned,
-            pinnedSet: new Set(pinned),
-          });
-        },
-        new Set()
-      );
-    }
+    els.pinnedCount.textContent = "0";
     showMessage("Loading…", false);
   }
 
@@ -924,18 +942,31 @@ async function load() {
 
     const dismissedNow = await getDismissedSet();
     const pinnedNow = await getPinnedUrls();
-    const pinnedSetNow = new Set(pinnedNow);
+    const searchLookup = issueByUrlMap(mineItems, inboxRawItems);
+    const { survivingUrls, fetchedIssues } = await reconcileMissingPins(
+      token,
+      pinnedNow,
+      searchLookup
+    );
+    if (
+      survivingUrls.length !== pinnedNow.length ||
+      survivingUrls.some((u, i) => u !== pinnedNow[i])
+    ) {
+      await setPinnedUrls(survivingUrls);
+    }
+    const pinnedSetNow = new Set(survivingUrls);
 
     renderAllLists({
       mineItems,
       inboxRawItems,
+      extraPinnedIssues: fetchedIssues,
       dismissed: dismissedNow,
-      pinnedUrls: pinnedNow,
+      pinnedUrls: survivingUrls,
       pinnedSet: pinnedSetNow,
     });
 
     const allForCi = [...new Map(
-      [...mineItems, ...inboxRawItems].map((it) => [it.html_url, it])
+      [...mineItems, ...inboxRawItems, ...fetchedIssues].map((it) => [it.html_url, it])
     ).values()];
     loadCiStatusesAsync(token, allForCi).catch(() => {});
 

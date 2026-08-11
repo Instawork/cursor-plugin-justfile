@@ -1,4 +1,4 @@
 node_modules/
 out/
-media/mermaid.min.js
+media/beautiful-mermaid.js
 *.vsix

@@ -7,26 +7,38 @@
     <title>Active tasks</title>
     <style>
         :root {
-            --bg: var(--vscode-sideBar-background, #f4f7f6);
-            --panel: var(--vscode-editor-background, #fff);
-            --ink: var(--vscode-foreground, #0f2744);
-            --muted: var(--vscode-descriptionForeground, #5a6b7d);
-            --border: var(--vscode-panel-border, #d8e3de);
-            --accent: var(--vscode-focusBorder, #0d9488);
-            --link: var(--vscode-textLink-foreground, #0d9488);
-            --hover: var(--vscode-list-hoverBackground, rgba(13, 148, 136, 0.08));
+            --bg: var(--vscode-sideBar-background, #f3f3f3);
+            --panel: var(--vscode-editorWidget-background, #ffffff);
+            --ink: var(--vscode-foreground, #1e1e1e);
+            --muted: var(--vscode-descriptionForeground, #616161);
+            --border: var(--vscode-panel-border, #e5e5e5);
+            --accent: var(--vscode-focusBorder, #007acc);
+            --link: var(--vscode-textLink-foreground, #007acc);
+            --hover: var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.04));
+            --selected: var(--vscode-list-activeSelectionBackground, rgba(0, 122, 204, 0.18));
             --mono: var(--vscode-editor-font-family, ui-monospace, monospace);
-            --radius: 10px;
-            --status-review-bg: rgba(59, 130, 246, 0.24);
+            --radius: 6px;
+            --radius-lg: 8px;
+            --nx-radius: var(--radius);
+            --nx-radius-lg: var(--radius-lg);
+            --nx-gutter: .85rem;
+            --nx-line: color-mix(in srgb, var(--border) 70%, transparent);
+            --nx-shadow: none;
+            --nx-shadow-lift: 0 1px 0 color-mix(in srgb, var(--border) 55%, transparent);
+            --nx-prop-label: 6.75rem;
+            --nx-soft: color-mix(in srgb, var(--bg) 70%, var(--panel));
+            --status-review-bg: rgba(59, 130, 246, 0.12);
             --status-review-fg: #1e3a8a;
-            --status-progress-bg: rgba(245, 158, 11, 0.28);
+            --status-progress-bg: rgba(245, 158, 11, 0.14);
             --status-progress-fg: #7c2d12;
-            --status-blocked-bg: rgba(239, 68, 68, 0.24);
+            --status-blocked-bg: rgba(239, 68, 68, 0.12);
             --status-blocked-fg: #7f1d1d;
-            --status-ready-bg: rgba(34, 197, 94, 0.24);
+            --status-ready-bg: rgba(34, 197, 94, 0.12);
             --status-ready-fg: #14532d;
-            --status-paused-bg: rgba(100, 116, 139, 0.25);
-            --status-paused-fg: #334155;
+            --status-backlog-bg: rgba(100, 116, 139, 0.12);
+            --status-backlog-fg: #334155;
+            --status-prioritized-bg: rgba(168, 85, 247, 0.12);
+            --status-prioritized-fg: #6b21a8;
             --iw: #2563eb;
             --fn: #0d9488;
             --if: #7c3aed;
@@ -38,7 +50,8 @@
             --status-progress-fg: #fcd34d;
             --status-blocked-fg: #fca5a5;
             --status-ready-fg: #86efac;
-            --status-paused-fg: #cbd5e1;
+            --status-backlog-fg: #cbd5e1;
+            --status-prioritized-fg: #d8b4fe;
         }
 
         @keyframes spin {
@@ -55,6 +68,7 @@
         }
 
         @keyframes flashBorder {
+
             0%,
             100% {
                 border-color: var(--border);
@@ -79,8 +93,7 @@
             }
         }
 
-        #reloadBtn.spinning,
-        #reconcileRefreshBtn.spinning {
+        #reloadBtn.spinning {
             animation: spin 0.8s linear infinite;
         }
 
@@ -89,13 +102,10 @@
             color: var(--muted);
         }
 
-        .task-card.kbd-focus {
+        .task-card.kbd-focus,
+        .board-card.kbd-focus {
             outline: 2px solid var(--accent);
             outline-offset: 1px;
-        }
-
-        .task-card.saved {
-            animation: flashBorder 0.9s ease;
         }
 
         * {
@@ -111,28 +121,7 @@
             display: flex;
             flex-direction: column;
             min-height: 100vh;
-            line-height: 1.4;
-        }
-
-        .top {
-            flex-shrink: 0;
-            border-bottom: 1px solid var(--border);
-            background: var(--panel);
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: .35rem;
-            padding: .45rem .6rem .35rem;
-            align-items: stretch;
-        }
-
-        .stats-bar {
-            height: 2px;
-            background: var(--border);
-            border-radius: 1px;
-            overflow: hidden;
+            line-height: 1.5;
         }
 
         .stats-bar-fill {
@@ -141,57 +130,6 @@
             background: var(--accent);
             border-radius: 1px;
             transition: width .35s ease;
-        }
-
-        .progress-wrap {
-            display: none;
-        }
-
-        .stats-copy {
-            min-width: 0;
-        }
-
-        .stats-title {
-            margin: 0;
-            font-size: .72rem;
-            font-weight: 650;
-            text-transform: uppercase;
-            letter-spacing: .06em;
-            color: var(--muted);
-        }
-
-        .stats-open {
-            margin: .15rem 0 0;
-            font-size: 1.35rem;
-            font-weight: 700;
-            font-variant-numeric: tabular-nums;
-            letter-spacing: -0.02em;
-        }
-
-        .stats-sub {
-            margin: .1rem 0 0;
-            font-size: .82em;
-            color: var(--muted);
-        }
-
-        .repo-summary {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .3rem;
-            padding: 0 .6rem .35rem;
-        }
-
-        .repo-summary .rs-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: .28rem;
-            font-size: .74rem;
-            font-weight: 600;
-            border-radius: 999px;
-            padding: .08rem .5rem;
-            border: 1px solid var(--border);
-            background: var(--bg);
-            color: var(--muted);
         }
 
         .repo-summary .rs-chip .dot {
@@ -206,111 +144,11 @@
             color: var(--ink);
         }
 
-        .toolbar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .35rem .45rem;
-            align-items: center;
-            padding: 0 .55rem .55rem;
-        }
-
-        .seg {
-            display: inline-flex;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            overflow: hidden;
-            background: var(--bg);
-        }
-
-        .seg button {
-            border: none;
-            border-radius: 0;
-            background: transparent;
-            padding: .28rem .55rem;
-            font-size: .85em;
-            color: var(--muted);
-            box-shadow: none;
-        }
-
-        .seg button:not(:last-child) {
-            border-right: 1px solid var(--border);
-        }
-
-        .seg button.active {
-            background: var(--hover);
-            color: var(--ink);
-            font-weight: 650;
-        }
-
-        .seg-label {
-            font-size: .68rem;
-            text-transform: uppercase;
-            letter-spacing: .05em;
-            color: var(--muted);
-            align-self: center;
-        }
-
-        .toolbar-actions {
-            margin-left: auto;
-            display: flex;
-            gap: .35rem;
-        }
-
-        .filter-pills {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .3rem;
-            padding: 0 .55rem .45rem;
-            align-items: center;
-        }
-
-        .filter-pills .pill {
-            border: 1px solid var(--border);
-            background: var(--bg);
-            border-radius: 999px;
-            padding: .18rem .55rem;
-            font-size: .78em;
-            font-weight: 600;
-            color: var(--muted);
-            cursor: pointer;
-            line-height: 1.35;
-        }
-
-        .filter-pills .pill:hover {
-            background: var(--hover);
-            color: var(--ink);
-        }
-
-        .filter-pills .pill.active {
-            border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-            background: color-mix(in srgb, var(--accent) 12%, var(--panel));
-            color: var(--ink);
-        }
 
         .filter-pills .pill .pill-count {
             margin-left: .25rem;
             font-variant-numeric: tabular-nums;
             opacity: .85;
-        }
-
-        .task-search {
-            display: flex;
-            align-items: center;
-            gap: .25rem;
-            padding: 0 .55rem .45rem;
-            flex: 1 1 100%;
-        }
-
-        .task-search input {
-            flex: 1;
-            min-width: 0;
-            font: inherit;
-            font-size: .85em;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: .28rem .45rem;
-            background: var(--panel);
-            color: var(--ink);
         }
 
         .task-search-clear {
@@ -322,168 +160,10 @@
             display: none;
         }
 
-        .reconcile-details {
-            margin-bottom: .85rem;
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            background: var(--panel);
-            padding: .35rem .5rem .45rem;
-        }
-
-        .reconcile-details summary {
-            cursor: pointer;
-            font-size: .72rem;
-            font-weight: 650;
-            text-transform: uppercase;
-            letter-spacing: .06em;
-            color: var(--muted);
-            list-style: none;
-            display: flex;
-            align-items: center;
-            gap: .35rem;
-        }
-
-        .reconcile-details summary::-webkit-details-marker {
-            display: none;
-        }
-
-        .reconcile-details summary::before {
-            content: "▸";
-            font-size: .85em;
-            transition: transform .15s ease;
-        }
-
-        .reconcile-details[open] summary::before {
-            transform: rotate(90deg);
-        }
-
-        .reconcile-dock {
-            margin-top: 1rem;
-            padding-top: 0.65rem;
-            border-top: 1px solid var(--border);
-        }
-
-        .reconcile-dock .section {
-            margin-bottom: 0;
-        }
-
-        .reconcile-toolbar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.35rem;
-            margin: 0 0 0.55rem;
-        }
-
-        .reconcile-toolbar button {
-            font: inherit;
-            font-size: 0.82em;
-            padding: 0.25rem 0.55rem;
-            border-radius: 6px;
-            border: 1px solid var(--border);
-            background: var(--panel);
-            cursor: pointer;
-            color: inherit;
-        }
-
-        .reconcile-toolbar button:hover {
-            border-color: var(--accent);
-        }
-
-        .reconcile-toolbar button.primary {
-            background: color-mix(in srgb, var(--accent) 18%, var(--panel));
-            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-        }
-
-        .reconcile-toolbar button.active {
-            background: color-mix(in srgb, var(--accent) 22%, var(--panel));
-            border-color: var(--accent);
-            font-weight: 600;
-        }
-
-        .reconcile-toolbar button:disabled {
-            opacity: 0.65;
-            cursor: wait;
-        }
-
-        .status-eyebrow {
-            display: block;
-            font-size: .66rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: .04em;
-            margin-bottom: .12rem;
-            line-height: 1.2;
-        }
-
-        .status-eyebrow.tone-blocked {
-            color: var(--status-blocked-fg);
-        }
-
-        .status-eyebrow.tone-review {
-            color: var(--status-review-fg);
-        }
-
-        .status-eyebrow.tone-progress {
-            color: var(--status-progress-fg);
-        }
-
-        .status-eyebrow.tone-ready {
-            color: var(--status-ready-fg);
-        }
-
-        .status-eyebrow.tone-paused,
-        .status-eyebrow.tone-default {
-            color: var(--muted);
-        }
-
-        .quick-add {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .35rem;
-            align-items: center;
-            padding: 0 .55rem .55rem;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .quick-add input {
-            flex: 1 1 8rem;
-            min-width: 0;
-            font: inherit;
-            font-size: .9em;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: .32rem .45rem;
-            background: var(--panel);
-            color: var(--ink);
-        }
-
-        .quick-add select {
-            font: inherit;
-            font-size: .85em;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: .32rem .4rem;
-            background: var(--panel);
-            color: var(--ink);
-            max-width: 9rem;
-        }
-
-        .quick-add select,
-        .quick-add button[type="submit"] {
-            display: none;
-        }
-
-        .quick-add:focus-within select,
-        .quick-add:focus-within button[type="submit"],
-        .quick-add.has-text select,
-        .quick-add.has-text button[type="submit"] {
-            display: block;
-        }
-
         .quick-add button.primary {
             border-color: var(--accent);
             background: color-mix(in srgb, var(--accent) 14%, var(--panel));
-            font-weight: 650;
+            font-weight: 600;
         }
 
         .title-row {
@@ -527,47 +207,6 @@
             opacity: .55;
         }
 
-        .pr-count-badge {
-            font-size: .72em;
-            font-weight: 700;
-            font-variant-numeric: tabular-nums;
-            border-radius: 999px;
-            padding: .06rem .38rem;
-            border: 1px solid var(--border);
-            background: var(--bg);
-            color: var(--muted);
-            flex-shrink: 0;
-            margin-top: .15rem;
-        }
-
-        .pr-count-badge.has-pr {
-            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-            color: var(--ink);
-        }
-
-        .foot kbd {
-            font-family: var(--mono);
-            font-size: .92em;
-            padding: .05rem .28rem;
-            border-radius: 4px;
-            border: 1px solid var(--border);
-            background: var(--bg);
-            color: var(--ink);
-        }
-
-        .foot .foot-hints {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .35rem .65rem;
-            margin-bottom: .25rem;
-        }
-
-        @media (max-height: 500px) {
-            .foot-hints {
-                display: none;
-            }
-        }
-
         .empty-actions {
             display: flex;
             flex-wrap: wrap;
@@ -579,7 +218,7 @@
         .empty-actions button.primary {
             border-color: var(--accent);
             background: color-mix(in srgb, var(--accent) 14%, var(--panel));
-            font-weight: 650;
+            font-weight: 600;
         }
 
         button {
@@ -596,26 +235,12 @@
             background: var(--hover);
         }
 
-        button.ghost {
-            background: transparent;
-        }
-
-        .main {
-            flex: 1;
-            overflow-y: auto;
-            padding: .45rem .55rem .65rem;
-        }
-
-        .section {
-            margin-bottom: .85rem;
-        }
-
-        .section-head {
-            display: flex;
-            align-items: center;
-            gap: .4rem;
-            margin: 0 0 .4rem;
-            padding: 0 .1rem;
+        button:focus-visible,
+        input:focus-visible,
+        select:focus-visible,
+        .pill:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
         }
 
         .section-head .sh-dot {
@@ -623,25 +248,6 @@
             height: .55rem;
             border-radius: 50%;
             flex-shrink: 0;
-        }
-
-        .section-head h2 {
-            margin: 0;
-            font-size: .72rem;
-            font-weight: 650;
-            text-transform: uppercase;
-            letter-spacing: .06em;
-            color: var(--muted);
-        }
-
-        .section-count {
-            font-size: .72rem;
-            font-variant-numeric: tabular-nums;
-            color: var(--muted);
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: .05rem .4rem;
         }
 
         .disc-hint {
@@ -652,82 +258,9 @@
             line-height: 1.35;
         }
 
-        .disc-cards {
-            display: flex;
-            flex-direction: column;
-            gap: .35rem;
-            margin-bottom: .65rem;
-        }
-
-        .disc-card {
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            background: var(--panel);
-            padding: .45rem .55rem;
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: .35rem .5rem;
-            align-items: start;
-        }
-
-        .disc-card.untracked {
-            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-        }
-
-        .disc-title {
-            margin: 0;
-            font-weight: 600;
-            font-size: .92em;
-            line-height: 1.35;
-        }
-
-        .disc-title a {
-            color: var(--link);
-            text-decoration: none;
-        }
-
-        .disc-title a:hover {
-            text-decoration: underline;
-        }
-
-        .disc-meta {
-            grid-column: 1 / -1;
-            display: flex;
-            flex-wrap: wrap;
-            gap: .35rem;
-            font-size: .78em;
-            color: var(--muted);
-        }
-
-        .disc-pill {
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: .05rem .4rem;
-            background: var(--bg);
-        }
-
-        .disc-pill.running {
-            border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-            color: var(--accent);
-            font-weight: 600;
-        }
-
-        .disc-actions {
-            grid-column: 1 / -1;
-            display: flex;
-            flex-wrap: wrap;
-            gap: .3rem;
-            justify-content: flex-end;
-        }
-
-        .disc-actions button {
-            font-size: .78em;
-            padding: .2rem .45rem;
-        }
-
         .ci-pill {
             font-size: .74em;
-            font-weight: 650;
+            font-weight: 600;
             border-radius: 999px;
             padding: .05rem .4rem;
             border: 1px solid var(--border);
@@ -777,19 +310,6 @@
             opacity: .6;
         }
 
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            font-size: .68rem;
-            font-weight: 750;
-            text-transform: uppercase;
-            letter-spacing: .04em;
-            border-radius: 999px;
-            padding: .1rem .42rem;
-            border: 1px solid transparent;
-            flex-shrink: 0;
-        }
-
         .status-pill.tone-blocked {
             color: var(--status-blocked-fg);
             background: var(--status-blocked-bg);
@@ -808,35 +328,21 @@
             border-color: color-mix(in srgb, var(--status-progress-fg) 35%, transparent);
         }
 
-        .status-pill.tone-ready {
-            color: var(--status-ready-fg);
-            background: var(--status-ready-bg);
-            border-color: color-mix(in srgb, var(--status-ready-fg) 35%, transparent);
+        .status-pill.tone-prioritized {
+            color: var(--status-prioritized-fg);
+            background: var(--status-prioritized-bg);
+            border-color: color-mix(in srgb, var(--status-prioritized-fg) 35%, transparent);
         }
 
-        .status-pill.tone-paused,
-        .status-pill.tone-default,
-        .status-pill.tone-other {
-            color: var(--muted);
-            background: var(--status-paused-bg);
-        }
-
-        .todo-next-action {
-            margin-top: .28rem;
-            font-size: .82em;
-            color: var(--muted);
-            line-height: 1.35;
-        }
-
-        .todo-next-action::before {
-            content: "→ ";
-            color: var(--accent);
-            font-weight: 700;
+        .status-pill.tone-backlog {
+            color: var(--status-backlog-fg);
+            background: var(--status-backlog-bg);
+            border-color: color-mix(in srgb, var(--status-backlog-fg) 35%, transparent);
         }
 
         .here-pill {
             font-size: .65rem;
-            font-weight: 800;
+            font-weight: 600;
             text-transform: uppercase;
             letter-spacing: .05em;
             border-radius: 999px;
@@ -885,24 +391,100 @@
             background: color-mix(in srgb, var(--accent) 12%, var(--panel));
         }
 
-        .task-card.pinned {
-            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+
+        .card-done-btn {
+            flex-shrink: 0;
+            align-self: flex-start;
+            margin-top: .05rem;
+            width: 1.2rem;
+            height: 1.2rem;
+            padding: 0;
+            border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+            border-radius: 5px;
+            background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+            color: var(--accent);
+            font-size: .72rem;
+            font-weight: 700;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-done-btn:hover {
+            background: color-mix(in srgb, var(--accent) 24%, var(--panel));
+            border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+            color: var(--ink);
+        }
+
+        .card-lead {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .12rem;
+            flex-shrink: 0;
+            margin-top: .05rem;
+        }
+
+        .card-lead .check {
+            margin-top: 0;
+        }
+
+        .nest-toggle {
+            flex-shrink: 0;
+            width: 1rem;
+            height: 1rem;
+            padding: 0;
+            border: none;
+            border-radius: 3px;
+            background: transparent;
+            color: var(--muted);
+            font-size: .65rem;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: .75;
+        }
+
+        .nest-toggle:hover {
+            color: var(--ink);
+            background: var(--hover);
+            opacity: 1;
+        }
+
+        .nest-toggle[aria-expanded="false"] {
+            transform: rotate(-90deg);
+        }
+
+        .board-card-done-btn {
+            margin-left: auto;
+            width: 1.15rem;
+            height: 1.15rem;
+            padding: 0;
+            font-size: .7rem;
+            font-weight: 700;
+            border-radius: 4px;
+            border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+            background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+            color: var(--accent);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
         }
 
         .task-card.done .todo-chip.tag {
             opacity: .55;
         }
 
-        .merge-into-panel {
-            margin-top: .65rem;
-            padding-top: .55rem;
-            border-top: 1px dashed var(--border);
-        }
-
         .merge-into-panel .field-label {
             display: block;
             font-size: .72rem;
-            font-weight: 650;
+            font-weight: 600;
             text-transform: uppercase;
             letter-spacing: .04em;
             color: var(--muted);
@@ -971,14 +553,6 @@
             color: var(--ink);
         }
 
-        .meta-row-secondary {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .28rem .35rem;
-            margin-top: .32rem;
-            align-items: center;
-        }
-
         .modal-actions.stack {
             flex-direction: column;
             align-items: stretch;
@@ -989,29 +563,6 @@
             text-align: left;
         }
 
-        .task-cards {
-            display: flex;
-            flex-direction: column;
-            gap: .4rem;
-            min-height: .5rem;
-        }
-
-        .task-card {
-            --card-accent: var(--accent);
-            position: relative;
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: .5rem .55rem .52rem .4rem;
-            background: var(--panel);
-            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
-            border-left: 3px solid var(--card-accent);
-            transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
-        }
-
-        .task-card:hover {
-            background: color-mix(in srgb, var(--panel) 92%, var(--hover));
-        }
-
         .task-card.dragging {
             opacity: .45;
             box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
@@ -1019,7 +570,9 @@
         }
 
         .task-card.drop-before::before,
-        .task-card.drop-after::after {
+        .task-card.drop-after::after,
+        .board-card.drop-before::before,
+        .board-card.drop-after::after {
             content: "";
             position: absolute;
             left: .25rem;
@@ -1029,30 +582,20 @@
             background: var(--accent);
         }
 
-        .task-card.drop-before::before {
+        .task-card.drop-before::before,
+        .board-card.drop-before::before {
             top: -.24rem;
         }
 
-        .task-card.drop-after::after {
+        .task-card.drop-after::after,
+        .board-card.drop-after::after {
             bottom: -.24rem;
         }
 
-        .task-card.drop-nest {
+        .task-card.drop-nest,
+        .board-card.drop-nest {
             box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
             background: color-mix(in srgb, var(--accent) 10%, var(--panel));
-        }
-
-        .task-nest {
-            display: flex;
-            flex-direction: column;
-            gap: .35rem;
-            margin: .4rem 0 0 1.1rem;
-            padding-left: .55rem;
-            border-left: 2px solid color-mix(in srgb, var(--border) 85%, var(--accent));
-        }
-
-        .task-nest .task-card {
-            box-shadow: none;
         }
 
         .section.section-drop-target .section-head {
@@ -1063,26 +606,6 @@
         .task-card.done {
             --card-accent: var(--border);
             opacity: 0.82;
-        }
-
-        .task-card.repo-instawork {
-            --card-accent: var(--iw);
-        }
-
-        .task-card.repo-finch {
-            --card-accent: var(--fn);
-        }
-
-        .task-card.repo-infrastructure {
-            --card-accent: var(--if);
-        }
-
-        .task-card.repo-unknown {
-            --card-accent: var(--muted);
-        }
-
-        #sectionsRoot.grouped .task-card .repo-badge {
-            display: none;
         }
 
         .task-card-head {
@@ -1169,21 +692,6 @@
             outline-offset: 2px;
         }
 
-        .repo-badge {
-            width: 1.35rem;
-            height: 1.35rem;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            margin-top: .02rem;
-            font-size: .75rem;
-            line-height: 1;
-            border: 1px solid var(--border);
-            background: var(--bg);
-        }
-
         .repo-badge.repo-instawork {
             color: var(--iw);
             border-color: rgba(37, 99, 235, 0.35);
@@ -1205,7 +713,7 @@
         .repo-badge.repo-unknown {
             color: var(--muted);
             font-size: .65rem;
-            font-weight: 800;
+            font-weight: 600;
         }
 
         .task-card-body {
@@ -1216,76 +724,6 @@
         .task-card.done .todo-title {
             text-decoration: line-through;
             color: var(--muted);
-        }
-
-        .todo-title {
-            font-weight: 650;
-            font-size: 1.02em;
-            line-height: 1.35;
-            word-break: break-word;
-            cursor: pointer;
-        }
-
-        .todo-title a {
-            color: var(--link);
-            text-decoration: none;
-        }
-
-        .todo-title a:hover {
-            text-decoration: underline;
-        }
-
-        .todo-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .28rem .35rem;
-            margin-top: .38rem;
-            align-items: center;
-        }
-
-        .todo-chip {
-            border-radius: 999px;
-            padding: .12rem .45rem;
-            font-size: .78em;
-            font-weight: 700;
-            letter-spacing: .01em;
-            max-width: 100%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            display: inline-flex;
-            align-items: center;
-            gap: .25rem;
-        }
-
-        .todo-chip.status {
-            background: var(--status-paused-bg);
-            color: var(--status-paused-fg);
-            border: 1px solid color-mix(in srgb, var(--status-paused-fg) 32%, transparent);
-        }
-
-        .todo-chip.status.review {
-            background: var(--status-review-bg);
-            color: var(--status-review-fg);
-            border-color: color-mix(in srgb, var(--status-review-fg) 35%, transparent);
-        }
-
-        .todo-chip.status.progress {
-            background: var(--status-progress-bg);
-            color: var(--status-progress-fg);
-            border-color: color-mix(in srgb, var(--status-progress-fg) 35%, transparent);
-        }
-
-        .todo-chip.status.blocked {
-            background: var(--status-blocked-bg);
-            color: var(--status-blocked-fg);
-            border-color: color-mix(in srgb, var(--status-blocked-fg) 35%, transparent);
-        }
-
-        .todo-chip.status.ready {
-            background: var(--status-ready-bg);
-            color: var(--status-ready-fg);
-            border-color: color-mix(in srgb, var(--status-ready-fg) 35%, transparent);
         }
 
         .todo-chip.repo {
@@ -1341,16 +779,12 @@
         .todo-chip.meta-more {
             cursor: pointer;
             opacity: .75;
-            font-weight: 650;
+            font-weight: 600;
         }
 
         .todo-chip.meta-more.open {
             opacity: 1;
             border-color: var(--accent);
-        }
-
-        .disc-hint.stale-scan {
-            color: var(--status-progress-fg);
         }
 
         .todo-chip.branch:hover,
@@ -1372,7 +806,7 @@
         .todo-chip.pr a {
             color: var(--link);
             text-decoration: none;
-            font-weight: 650;
+            font-weight: 600;
         }
 
         .todo-chip.pr.repo-instawork {
@@ -1416,99 +850,42 @@
             opacity: .7;
         }
 
-        .todo-tag-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.28rem;
-            margin-top: 0.32rem;
-            align-items: center;
+        .todo-chip.plan {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--link);
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .todo-chip.plan::before {
+            content: "◆";
+            font-size: .9em;
+            opacity: .7;
+        }
+
+        .todo-chip.git {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .todo-chip.git.warn {
+            border-color: color-mix(in srgb, var(--warn, #d19a12) 55%, transparent);
+            color: var(--warn, #d19a12);
+        }
+
+        .todo-chip.git.bad {
+            border-color: color-mix(in srgb, var(--danger, #d64d4d) 55%, transparent);
+            color: var(--danger, #d64d4d);
         }
 
         .todo-chip.tag {
-            font-weight: 650;
+            font-weight: 600;
             font-size: 0.74em;
             background: color-mix(in srgb, var(--tag-accent) 22%, var(--panel));
             color: var(--tag-accent);
             border: 1px solid color-mix(in srgb, var(--tag-accent) 44%, transparent);
-        }
-
-        .todo-detail {
-            margin-top: .42rem;
-            font-size: .86em;
-            color: var(--muted);
-            line-height: 1.45;
-            word-break: break-word;
-        }
-
-        .todo-detail summary {
-            cursor: pointer;
-            color: var(--ink);
-            font-weight: 600;
-            font-size: .92em;
-            list-style: none;
-            display: inline-flex;
-            align-items: center;
-            gap: .25rem;
-        }
-
-        .todo-detail summary::-webkit-details-marker {
-            display: none;
-        }
-
-        .todo-detail summary::before {
-            content: "▸";
-            font-size: .85em;
-            color: var(--muted);
-        }
-
-        .todo-detail[open] summary::before {
-            content: "▾";
-        }
-
-        .todo-detail .detail-body {
-            margin-top: .35rem;
-            padding-top: .35rem;
-            border-top: 1px dashed var(--border);
-        }
-
-        .todo-detail .detail-body code {
-            font-family: var(--mono);
-            font-size: .92em;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 0 .25rem;
-        }
-
-        .todo-detail .detail-body a {
-            color: var(--link);
-        }
-
-        .foot {
-            flex-shrink: 0;
-            padding: .4rem .6rem .55rem;
-            border-top: 1px solid var(--border);
-            font-size: .78em;
-            color: var(--muted);
-            line-height: 1.45;
-            background: var(--panel);
-        }
-
-        .empty {
-            margin: 1.25rem .5rem;
-            padding: 1.25rem 1rem;
-            text-align: center;
-            border: 1px dashed var(--border);
-            border-radius: var(--radius);
-            background: var(--panel);
-            color: var(--muted);
-        }
-
-        .empty strong {
-            display: block;
-            color: var(--ink);
-            font-size: 1.05em;
-            margin-bottom: .35rem;
         }
 
         .hidden {
@@ -1517,60 +894,6 @@
 
         .task-card.expanded {
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
-        }
-
-        .task-expand-panel {
-            margin: .45rem 0 0 2.65rem;
-            padding: .55rem .55rem .6rem;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            background: color-mix(in srgb, var(--panel) 96%, var(--hover));
-        }
-
-        .field-grid {
-            display: grid;
-            gap: .4rem;
-        }
-
-        .field-grid label {
-            display: grid;
-            gap: .2rem;
-            font-size: .72rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: .04em;
-            color: var(--muted);
-        }
-
-        .field-grid input,
-        .field-grid select,
-        .field-grid textarea {
-            font: inherit;
-            font-size: .92em;
-            font-weight: 400;
-            text-transform: none;
-            letter-spacing: normal;
-            color: var(--ink);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: .32rem .4rem;
-            background: var(--panel);
-            width: 100%;
-        }
-
-        .field-grid textarea {
-            min-height: 4.5rem;
-            resize: vertical;
-            font-family: var(--mono);
-            font-size: .86em;
-            line-height: 1.45;
-        }
-
-        .tag-field-editor {
-            grid-column: 1 / -1;
-            display: flex;
-            flex-direction: column;
-            gap: 0.45rem;
         }
 
         .tag-field-editor .field-label {
@@ -1605,10 +928,6 @@
             box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag-accent) 55%, transparent);
         }
 
-        .tag-chip-display {
-            font-size: 0.72rem;
-        }
-
         .tag-add-row input {
             flex: 1;
             min-width: 8rem;
@@ -1625,76 +944,23 @@
             padding: 0.25rem 0.55rem;
         }
 
-        .expand-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .35rem;
-            margin-top: .5rem;
-            align-items: center;
-        }
-
-        .expand-actions button {
-            border: 1px solid var(--border);
-            background: var(--panel);
-            border-radius: 6px;
-            padding: .3rem .55rem;
-            font-size: .88em;
-            cursor: pointer;
-            color: var(--ink);
-        }
-
         .expand-actions button.primary {
             border-color: var(--accent);
             background: color-mix(in srgb, var(--accent) 14%, var(--panel));
             color: var(--ink);
-            font-weight: 650;
-        }
-
-        .expand-readonly {
-            margin-top: .35rem;
-            font-size: .82em;
-            color: var(--muted);
-            line-height: 1.45;
-        }
-
-        .expand-readonly a {
-            color: var(--link);
-            cursor: pointer;
-        }
-
-        .todo-title {
-            cursor: pointer;
+            font-weight: 600;
         }
 
         .modal-backdrop {
             position: fixed;
             inset: 0;
             z-index: 50;
-            background: rgba(0, 0, 0, 0.35);
+            background: color-mix(in srgb, var(--ink) 28%, transparent);
+            backdrop-filter: blur(2px);
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 1rem;
-        }
-
-        .modal-card {
-            width: min(22rem, 100%);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            background: var(--panel);
-            padding: 1rem .95rem .85rem;
-            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
-        }
-
-        .modal-card h3 {
-            margin: 0 0 .35rem;
-            font-size: 1.05rem;
-        }
-
-        .modal-card p {
-            margin: 0 0 .75rem;
-            color: var(--muted);
-            line-height: 1.45;
         }
 
         .modal-actions {
@@ -1714,7 +980,7 @@
 
         .modal-actions button.primary {
             border-color: var(--accent);
-            font-weight: 650;
+            font-weight: 600;
         }
 
         .modal-actions button.danger {
@@ -1764,6 +1030,987 @@
             background: var(--panel);
             cursor: pointer;
         }
+
+        /* ------------------------------------------------------------------
+           Panel styles: calmer shell, Notion-style task page, board view.
+           Tokens and keyframes live in the single :root at the top of the
+           sheet; these rules carry the structural/layout chrome.
+           ------------------------------------------------------------------ */
+
+        /* ---- shell -------------------------------------------------------- */
+
+        .top {
+            border-bottom: 1px solid var(--nx-line);
+            background: var(--bg);
+            padding-top: .15rem;
+        }
+
+        .stats {
+            display: flex;
+            align-items: baseline;
+            gap: .5rem;
+            padding: .45rem var(--nx-gutter) .05rem;
+        }
+
+        .stats-copy {
+            display: flex;
+            align-items: baseline;
+            gap: .5rem;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+
+        .stats-title {
+            font-size: 1.02rem;
+            font-weight: 600;
+            text-transform: none;
+            letter-spacing: -0.01em;
+            color: var(--ink);
+            order: 1;
+        }
+
+        .stats-open {
+            margin: 0;
+            font-size: .82rem;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+            color: var(--muted);
+            order: 2;
+        }
+
+        .stats-sub {
+            margin: 0;
+            font-size: .78rem;
+            color: var(--muted);
+            order: 3;
+            margin-left: auto;
+        }
+
+        .stats-bar {
+            order: 4;
+            width: 100%;
+            height: 1px;
+            background: var(--nx-line);
+            margin-top: .45rem;
+        }
+
+        .repo-summary {
+            padding: .4rem var(--nx-gutter) 0;
+            gap: .35rem;
+        }
+
+        .repo-summary:empty {
+            display: none;
+        }
+
+        .repo-summary .rs-chip {
+            background: transparent;
+            border-color: var(--nx-line);
+            font-weight: 500;
+            font-size: .73rem;
+            padding: .1rem .45rem;
+        }
+
+        .toolbar {
+            padding: .5rem var(--nx-gutter) .45rem;
+            gap: .3rem .4rem;
+        }
+
+        .seg {
+            border-color: var(--nx-line);
+            border-radius: var(--nx-radius);
+            background: var(--nx-soft);
+        }
+
+        .seg button {
+            padding: .24rem .6rem;
+            font-size: .82em;
+            font-weight: 500;
+        }
+
+        .seg button:not(:last-child) {
+            border-right-color: var(--nx-line);
+        }
+
+        .seg button.active {
+            background: var(--panel);
+            color: var(--ink);
+            font-weight: 600;
+            box-shadow: var(--nx-shadow);
+        }
+
+        .toolbar-actions {
+            gap: .2rem;
+        }
+
+        .group-picker {
+            display: inline-flex;
+            align-items: center;
+            gap: .3rem;
+            color: var(--muted);
+            font-size: .78em;
+        }
+
+        .group-picker select {
+            width: auto;
+            min-width: 6.6rem;
+            padding: .24rem 1.45rem .24rem .45rem;
+            border: 1px solid var(--nx-line);
+            border-radius: var(--nx-radius);
+            background: var(--nx-soft);
+            color: var(--ink);
+            font: inherit;
+        }
+
+        button.ghost {
+            border-color: transparent;
+            color: var(--muted);
+            border-radius: var(--nx-radius);
+        }
+
+        button.ghost:hover {
+            background: var(--hover);
+            color: var(--ink);
+        }
+
+        .toolbar-actions button.ghost svg {
+            width: 14px;
+            height: 14px;
+            display: block;
+        }
+
+        .filter-pills {
+            padding: 0 var(--nx-gutter) .5rem;
+            gap: .28rem;
+        }
+
+        .filter-pills .pill {
+            border-color: transparent;
+            background: transparent;
+            font-weight: 500;
+            font-size: .77em;
+            padding: .15rem .5rem;
+            border-radius: var(--nx-radius);
+        }
+
+        .filter-pills .pill.active {
+            background: var(--hover);
+            border-color: transparent;
+            font-weight: 600;
+        }
+
+        .task-search {
+            padding: 0 var(--nx-gutter) .5rem;
+        }
+
+        .task-search input {
+            border-color: var(--nx-line);
+            border-radius: var(--nx-radius);
+            background: var(--nx-soft);
+            padding: .34rem .55rem;
+        }
+
+        .task-search input:focus {
+            background: var(--panel);
+            outline: none;
+            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+        }
+
+        .quick-add {
+            padding: 0 var(--nx-gutter) .6rem;
+            border-bottom: none;
+        }
+
+        .quick-add input {
+            border-color: transparent;
+            background: transparent;
+            padding: .34rem .3rem;
+            font-size: .95em;
+        }
+
+        .quick-add input::placeholder {
+            color: var(--muted);
+        }
+
+        .quick-add:focus-within input,
+        .quick-add.has-text input {
+            border-color: var(--nx-line);
+            background: var(--panel);
+            padding-left: .55rem;
+        }
+
+        .main {
+            padding: .65rem var(--nx-gutter) 1.25rem;
+            background: var(--bg);
+        }
+
+        .foot {
+            background: var(--bg);
+            border-top: 1px solid var(--nx-line);
+            padding: .4rem var(--nx-gutter) .5rem;
+            font-size: .74em;
+        }
+
+        /* ---- sections and rows -------------------------------------------- */
+
+        .section {
+            margin-bottom: 1.1rem;
+        }
+
+        .section-head {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            margin-bottom: .5rem;
+        }
+
+        .section-head h2 {
+            font-size: .7rem;
+            letter-spacing: .07em;
+        }
+
+        .section-count {
+            background: transparent;
+            border-color: transparent;
+            padding: 0;
+            opacity: .75;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .task-cards {
+            display: flex;
+            flex-direction: column;
+            gap: .3rem;
+        }
+
+        @media (min-width: 64rem) {
+            .task-cards {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                align-items: start;
+            }
+            .task-cards > .task-card {
+                min-width: 0;
+            }
+        }
+
+        .task-card {
+            --card-accent: var(--accent);
+            position: relative;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            border-left: 3px solid var(--card-accent);
+            background: var(--panel);
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+            padding: .4rem .2rem .38rem .45rem;
+            transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
+        }
+
+        .task-card:hover {
+            background: color-mix(in srgb, var(--panel) 92%, var(--hover));
+        }
+
+        .task-card.pinned {
+            background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04),
+                inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+        }
+
+        .todo-title {
+            font-weight: 500;
+            font-size: 1em;
+            letter-spacing: -0.005em;
+        }
+
+        .todo-meta {
+            display: flex;
+            flex-wrap: wrap;
+            margin-top: .34rem;
+            gap: .25rem .3rem;
+        }
+
+        .todo-chip {
+            font-weight: 500;
+            font-size: .74em;
+            padding: .1rem .42rem;
+        }
+
+        .status-pill {
+            font-size: .66rem;
+            font-weight: 600;
+            text-transform: none;
+            letter-spacing: normal;
+            border-color: transparent;
+        }
+
+        .todo-next-action {
+            color: var(--muted);
+            font-size: .84em;
+        }
+
+        /* ---- density tiers ------------------------------------------------
+           Root cards get room and a body; nested sub-tasks get tighter. The
+           budget comes out of type and padding only — checkbox, pin, and drag
+           handle keep their size at every depth so hit targets never shrink. */
+
+        .task-card[data-depth="0"] {
+            padding: .68rem .7rem .7rem .5rem;
+            --body-lines: 2;
+        }
+
+        .task-card[data-depth="1"] {
+            padding: .38rem .5rem .4rem .38rem;
+            border-left-width: 2px;
+        }
+
+        .task-card[data-depth="1"] .todo-title {
+            font-size: .9em;
+        }
+
+        .task-card[data-depth="1"] .todo-next-action {
+            font-size: .79em;
+        }
+
+        .task-card[data-depth="2"] {
+            padding: .28rem .45rem .3rem .34rem;
+            border-left-width: 2px;
+        }
+
+        .task-card[data-depth="2"] .todo-title {
+            font-size: .85em;
+        }
+
+        /* Without this the secondary line would inherit the base .84em and end up
+           larger than the depth-1 override, inverting the hierarchy. */
+        .task-card[data-depth="2"] .todo-next-action {
+            font-size: .75em;
+        }
+
+        .task-card[data-depth="2"] .todo-meta,
+        .task-card[data-depth="2"] .meta-row-secondary {
+            display: none;
+        }
+
+        /* Both of these only bite in list mode: grouped modes already hide every
+           badge via `#sectionsRoot.grouped .task-card .repo-badge`. */
+        .task-card[data-depth="1"] .repo-badge,
+        .task-card[data-depth="2"] .repo-badge {
+            width: 1.1rem;
+            height: 1.1rem;
+            font-size: .66rem;
+        }
+
+        /* Hidden rather than faded: it is dropped for every card at this depth,
+           so there is no hover-triggered reflow. */
+        .repo-badge.is-redundant {
+            display: none;
+        }
+
+        .task-nest {
+            display: flex;
+            flex-direction: column;
+            gap: .22rem;
+            margin: .35rem 0 0 .7rem;
+            padding-left: .4rem;
+            border-left: 2px solid color-mix(in srgb, var(--border) 85%, var(--accent));
+            grid-column: 1 / -1;
+        }
+
+        .task-nest .task-card {
+            box-shadow: none;
+        }
+
+        /* ---- card body ----------------------------------------------------- */
+
+        .todo-body {
+            margin-top: .32rem;
+            color: var(--muted);
+            font-size: .86em;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            display: -webkit-box;
+            -webkit-line-clamp: var(--body-lines, 2);
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* ---- inline editing ------------------------------------------------ */
+
+        .editable {
+            border: 1px solid transparent;
+            border-radius: 4px;
+            margin-left: -.3rem;
+            padding: .05rem .28rem;
+            cursor: text;
+            transition: border-color .12s ease, background .12s ease;
+        }
+
+        .task-card:hover .editable {
+            border-color: color-mix(in srgb, var(--border) 65%, transparent);
+        }
+
+        .editable:hover {
+            border-color: var(--border);
+            background: color-mix(in srgb, var(--panel) 88%, var(--hover));
+        }
+
+        .editable:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+        }
+
+        /* No extra opacity here: this label is the only thing telling you the
+           field is empty, so it has to stay legible against the card. */
+        .editable.is-empty {
+            color: var(--muted);
+            font-style: italic;
+        }
+
+        .inline-edit {
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            margin-left: -.3rem;
+            padding: .05rem .28rem;
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: inherit;
+            font-size: inherit;
+            font-weight: inherit;
+            line-height: inherit;
+            resize: none;
+            overflow: hidden;
+        }
+
+        .inline-edit::placeholder {
+            color: var(--muted);
+        }
+
+        /* A 1px border alone reads almost the same as the hover border, so the
+           one state where keystrokes are captured gets a real ring. */
+        .inline-edit:focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+        }
+
+        /* The title shares a wrapping flex row with the urgency dot and chips.
+           width:100% would push them onto a second line for as long as the
+           editor is open, so the title variant flexes instead. */
+        .inline-edit.todo-title {
+            width: auto;
+            flex: 1 1 auto;
+            min-width: 6rem;
+            font-size: 1em;
+            font-weight: 500;
+            letter-spacing: -0.005em;
+        }
+
+        .inline-edit.todo-next-action {
+            font-size: .84em;
+            color: var(--muted);
+        }
+
+        .inline-edit.todo-body {
+            display: block;
+            font-size: .86em;
+            line-height: 1.45;
+            color: var(--ink);
+            max-height: 12rem;
+            overflow: auto;
+        }
+
+        /* ---- expand disclosure --------------------------------------------- */
+
+        .card-expand-btn {
+            flex-shrink: 0;
+            width: 1rem;
+            height: 1rem;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            border-radius: 3px;
+            background: transparent;
+            color: var(--muted);
+            font-size: .65rem;
+            line-height: 1;
+            cursor: pointer;
+            opacity: .7;
+            transition: opacity .12s ease, transform .12s ease, background .12s ease;
+        }
+
+        .task-card:hover .card-expand-btn,
+        .card-expand-btn:focus-visible {
+            opacity: 1;
+        }
+
+        .card-expand-btn:hover {
+            background: var(--hover);
+            color: var(--ink);
+        }
+
+        .card-expand-btn[aria-expanded="true"] {
+            opacity: 1;
+            transform: rotate(180deg);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        .empty {
+            margin: 1.5rem auto;
+            max-width: 22rem;
+            padding: 1.35rem 1.15rem;
+            border: 1px solid var(--nx-line);
+            border-radius: var(--nx-radius-lg);
+            background: var(--panel);
+            box-shadow: none;
+            text-align: center;
+        }
+
+        .empty strong {
+            display: block;
+            font-size: 1.02em;
+            font-weight: 600;
+            margin-bottom: .35rem;
+            letter-spacing: -0.01em;
+        }
+
+        .empty > span {
+            display: block;
+            color: var(--muted);
+            font-size: .88em;
+            line-height: 1.4;
+        }
+
+        /* ---- task page (expanded row / board overlay) --------------------- */
+
+        .task-expand-panel {
+            margin: .5rem 0 .2rem;
+            padding: 0;
+            border: none;
+            border-radius: var(--nx-radius);
+            background: transparent;
+        }
+
+        .task-page {
+            background: var(--panel);
+            border: 1px solid var(--nx-line);
+            border-radius: var(--nx-radius-lg);
+            padding: 1rem 1.1rem 1rem;
+            box-shadow: var(--nx-shadow);
+        }
+
+        .task-page-head {
+            margin-bottom: .9rem;
+        }
+
+        .task-page-head input.task-page-title {
+            width: 100%;
+            font: inherit;
+            font-size: 1.28rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            line-height: 1.3;
+            color: var(--ink);
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            padding: .1rem .3rem;
+            margin-left: -.3rem;
+        }
+
+        .task-page-head input.task-page-title:hover {
+            background: var(--hover);
+        }
+
+        .task-page-head input.task-page-title:focus {
+            outline: none;
+            background: var(--panel);
+            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+        }
+
+        .task-page-chips {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .3rem;
+            margin-top: .5rem;
+        }
+
+        .task-page-group {
+            border-top: 1px solid var(--nx-line);
+            padding-top: .7rem;
+            margin-top: .8rem;
+        }
+
+        .task-page-group>.group-label {
+            display: block;
+            font-size: .66rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: var(--muted);
+            margin-bottom: .5rem;
+        }
+
+        details.task-page-group>summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+            font-size: .66rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: var(--muted);
+        }
+
+        details.task-page-group>summary::-webkit-details-marker {
+            display: none;
+        }
+
+        details.task-page-group>summary::before {
+            content: "▸";
+            font-size: .9em;
+            transition: transform .15s ease;
+        }
+
+        details.task-page-group[open]>summary::before {
+            transform: rotate(90deg);
+        }
+
+        details.task-page-group[open]>summary {
+            margin-bottom: .5rem;
+        }
+
+        /* Property rows: label left, control right — the field-grid markup is
+           unchanged, only its layout is. */
+        .task-page .field-grid {
+            display: grid;
+            gap: .12rem;
+        }
+
+        .task-page .field-grid>label {
+            display: grid;
+            grid-template-columns: var(--nx-prop-label) minmax(0, 1fr);
+            align-items: center;
+            gap: .5rem;
+            font-size: .78rem;
+            font-weight: 500;
+            text-transform: none;
+            letter-spacing: normal;
+            padding: .16rem .3rem;
+            margin-left: -.3rem;
+            border-radius: 6px;
+        }
+
+        .task-page .field-grid>label:hover {
+            background: var(--hover);
+        }
+
+        .task-page .field-grid input,
+        .task-page .field-grid select,
+        .task-page .field-grid textarea {
+            border-color: transparent;
+            background: transparent;
+            border-radius: 6px;
+            padding: .22rem .35rem;
+        }
+
+        .task-page .field-grid input:hover,
+        .task-page .field-grid select:hover,
+        .task-page .field-grid textarea:hover {
+            border-color: var(--nx-line);
+        }
+
+        .task-page .field-grid input:focus,
+        .task-page .field-grid select:focus,
+        .task-page .field-grid textarea:focus {
+            outline: none;
+            background: var(--panel);
+            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+        }
+
+        .task-page .field-grid input[type="checkbox"] {
+            width: auto;
+            justify-self: start;
+        }
+
+        .task-page .field-grid label.field-block {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: .3rem;
+        }
+
+        .task-page .field-grid label.field-block textarea {
+            border-color: var(--nx-line);
+            background: var(--nx-soft);
+            min-height: 6rem;
+            font-family: inherit;
+            font-size: .88em;
+            padding: .5rem .55rem;
+        }
+
+        .task-page .tag-field-editor {
+            padding-top: .2rem;
+        }
+
+        .task-page .expand-actions {
+            margin-top: 1rem;
+            padding-top: .75rem;
+            border-top: 1px solid var(--nx-line);
+            gap: .3rem;
+        }
+
+        .task-page .expand-actions button {
+            border-color: var(--nx-line);
+            border-radius: var(--nx-radius);
+            font-size: .84em;
+            padding: .28rem .6rem;
+        }
+
+        .task-page .merge-into-panel {
+            margin-top: 0;
+            padding-top: 0;
+            border-top: none;
+        }
+
+        /* Board mode opens the same page inside a centered overlay. */
+        .task-page-modal .modal-card {
+            width: min(34rem, 100%);
+            max-height: 86vh;
+            overflow-y: auto;
+            padding: 0;
+            border-radius: var(--nx-radius-lg);
+            border-color: var(--nx-line);
+        }
+
+        .task-page-modal .task-page {
+            border: none;
+            box-shadow: none;
+            border-radius: var(--nx-radius-lg);
+            padding: 1.15rem 1.25rem 1.1rem;
+        }
+
+        /* ---- board -------------------------------------------------------- */
+
+        .board {
+            display: flex;
+            gap: .7rem;
+            align-items: flex-start;
+            overflow-x: auto;
+            padding-bottom: .6rem;
+        }
+
+        .board-col {
+            flex: 0 0 15.5rem;
+            max-width: 15.5rem;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--nx-line);
+            border-radius: var(--nx-radius-lg);
+            background: var(--nx-soft);
+            padding: .1rem;
+            transition: background .15s ease;
+        }
+
+        .board-col.drop-target {
+            background: color-mix(in srgb, var(--accent) 10%, transparent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+        }
+
+        .board-col-head {
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            padding: .3rem .45rem .45rem;
+        }
+
+        .board-col-head .bc-dot {
+            width: .5rem;
+            height: .5rem;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .board-col-head h2 {
+            margin: 0;
+            font-size: .72rem;
+            font-weight: 600;
+            letter-spacing: .04em;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .board-col-head .bc-count {
+            font-size: .72rem;
+            font-variant-numeric: tabular-nums;
+            color: var(--muted);
+            opacity: .8;
+        }
+
+        .board-col-body {
+            display: flex;
+            flex-direction: column;
+            gap: .3rem;
+            min-height: 2.75rem;
+            padding: 0 .12rem .3rem;
+        }
+
+        .board-card {
+            border: 1px solid var(--nx-line);
+            border-left: 2px solid var(--border);
+            border-radius: var(--nx-radius);
+            background: var(--panel);
+            box-shadow: none;
+            padding: .42rem .48rem .38rem;
+            position: relative;
+        }
+
+        .board-card:hover {
+            border-color: color-mix(in srgb, var(--ink) 14%, var(--nx-line));
+            border-left-color: var(--border);
+            background: var(--panel);
+        }
+
+        .board-card.is-expanded {
+            border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+        }
+
+        .board-card-title {
+            font-size: .9em;
+            font-weight: 600;
+            line-height: 1.4;
+            word-break: break-word;
+            display: flex;
+            align-items: flex-start;
+            gap: .35rem;
+        }
+
+        .board-card-title-text {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .board-card-next {
+            margin-top: .3rem;
+            font-size: .78em;
+            color: var(--muted);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .board-card-foot {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .25rem;
+            margin-top: .42rem;
+        }
+
+        .board-card-pin-btn {
+            margin-left: auto;
+        }
+
+        .board-card-pin-btn + .board-card-done-btn {
+            margin-left: 0;
+        }
+
+        .board-prio {
+            font-size: .66rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: .03em;
+            color: var(--muted);
+            border: 1px solid var(--nx-line);
+            border-radius: 999px;
+            padding: .02rem .34rem;
+        }
+
+        .board-prio.p0 {
+            color: var(--status-blocked-fg);
+            border-color: color-mix(in srgb, var(--status-blocked-fg) 40%, transparent);
+            background: var(--status-blocked-bg);
+        }
+
+        .board-prio.p1 {
+            color: var(--status-progress-fg);
+            border-color: color-mix(in srgb, var(--status-progress-fg) 38%, transparent);
+        }
+
+        .board-col-empty {
+            font-size: .76em;
+            color: var(--muted);
+            opacity: .7;
+            padding: .5rem .45rem;
+            border: 1px dashed var(--nx-line);
+            border-radius: var(--nx-radius);
+            text-align: center;
+        }
+
+        .board-col-done {
+            opacity: .92;
+        }
+
+        .board-col-done .board-col-head h2 {
+            font-style: italic;
+        }
+
+        .board-nest {
+            display: flex;
+            flex-direction: column;
+            gap: .22rem;
+            margin-top: .35rem;
+            margin-left: .35rem;
+            padding-left: .4rem;
+            border-left: 2px solid var(--nx-line);
+        }
+
+        .board-card[data-depth="1"] {
+            font-size: .94em;
+        }
+
+        .board-card[data-depth="2"] {
+            font-size: .88em;
+        }
+
+        .board-card[data-depth="2"] .board-card-next {
+            display: none;
+        }
+
+        .filter-pills .pill.hide-nested {
+            margin-right: .15rem;
+        }
+
+        .filter-pills .pill.hide-nested-sep {
+            width: 1px;
+            height: .9rem;
+            padding: 0;
+            border: none;
+            background: var(--border);
+            cursor: default;
+            pointer-events: none;
+            opacity: .55;
+            margin: 0 .1rem 0 .05rem;
+        }
     </style>
 </head>
 
@@ -1771,7 +2018,7 @@
     <header class="top">
         <div class="stats" id="statsBlock">
             <div class="stats-copy">
-                <p class="stats-title">Open work</p>
+                <p class="stats-title">Active work</p>
                 <p class="stats-open" id="openCount">—</p>
                 <p class="stats-sub" id="statsSub">—</p>
                 <div class="stats-bar" aria-hidden="true">
@@ -1781,32 +2028,73 @@
         </div>
         <div class="repo-summary" id="repoSummary"></div>
         <div class="toolbar">
+            <div class="seg" role="tablist" aria-label="View mode">
+                <button type="button" class="active" data-view="list" role="tab">List</button>
+                <button type="button" data-view="board" role="tab">Board</button>
+            </div>
             <div class="seg" role="tablist" aria-label="Filter tasks">
                 <button type="button" class="active" data-filter="open" role="tab">Open</button>
                 <button type="button" data-filter="all" role="tab">All</button>
                 <button type="button" data-filter="done" role="tab">Done</button>
             </div>
             <div class="toolbar-actions">
-                <button type="button" class="ghost" id="mergeTasksBtn" title="Nest tasks under one initiative" aria-label="Nest tasks">⧉</button>
-                <button type="button" class="ghost" id="groupToggle" title="Group: List" aria-label="Change list grouping">⫶</button>
-                <button type="button" class="ghost" id="dbBtn" title="Open database" aria-label="Open database">Db</button>
-                <button type="button" class="ghost" id="reloadBtn" title="Refresh tasks and reconcile scan" aria-label="Refresh">↻</button>
-                <button type="button" class="ghost" id="popOutBtn" title="Pop out panel" aria-label="Pop out">⤢</button>
+                <button type="button" class="ghost" id="mergeTasksBtn" title="Nest tasks under one initiative"
+                    aria-label="Nest tasks"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true">
+                        <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/>
+                        <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/>
+                        <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/>
+                    </svg></button>
+                <label class="group-picker" id="groupPicker">
+                    <span>Group by</span>
+                    <select id="groupSelect" aria-label="Group list by">
+                        <option value="list">None</option>
+                        <option value="repo">Repository</option>
+                        <option value="status">Status</option>
+                    </select>
+                </label>
+                <button type="button" class="ghost" id="dbBtn" title="Open database"
+                    aria-label="Open database"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true">
+                        <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                        <path d="M3 5V19A9 3 0 0 0 21 19V5"/>
+                        <path d="M3 12A9 3 0 0 0 21 12"/>
+                    </svg></button>
+                <button type="button" class="ghost" id="reloadBtn" title="Refresh tasks and per-row PR/git status"
+                    aria-label="Refresh"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true">
+                        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                        <path d="M8 16H3v5"/>
+                    </svg></button>
+                <button type="button" class="ghost" id="popOutBtn" title="Pop out panel" aria-label="Pop out"><svg
+                        width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M15 3h6v6"/>
+                        <path d="M10 14 21 3"/>
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    </svg></button>
             </div>
         </div>
         <div class="filter-pills" role="tablist" aria-label="View filters" id="filterPills"></div>
         <div class="task-search">
-            <input type="search" id="taskSearch" placeholder="Filter tasks…" aria-label="Filter tasks" autocomplete="off" />
-            <button type="button" class="ghost task-search-clear hidden" id="taskSearchClear" aria-label="Clear filter">×</button>
+            <input type="search" id="taskSearch" placeholder="Filter tasks…" aria-label="Filter tasks"
+                autocomplete="off" />
+            <button type="button" class="ghost task-search-clear hidden" id="taskSearchClear"
+                aria-label="Clear filter">×</button>
         </div>
         <form class="quick-add" id="quickAddForm" autocomplete="off">
             <input type="text" id="quickAddTitle" placeholder="Add a task…" aria-label="Title" />
             <select id="quickAddStatus" aria-label="Status">
-                <option value="in progress">In progress</option>
-                <option value="review">Review</option>
+                <option value="backlog">Backlog</option>
+                <option value="in progress">In Progress</option>
+                <option value="prioritized">Prioritized</option>
+                <option value="review">In Review</option>
                 <option value="blocked">Blocked</option>
-                <option value="ready to merge">Ready</option>
-                <option value="paused">Paused</option>
             </select>
             <button type="submit" class="primary">Add</button>
         </form>
@@ -1814,10 +2102,9 @@
     <main class="main" id="main">
         <div id="panelNotice" class="panel-notice hidden" role="alert" aria-live="assertive"></div>
         <div class="empty hidden" id="emptyHint">
-            <strong>Start tracking work</strong>
-            <span>Type a title above to add your first task, or scan GitHub to import open PRs.</span>
+            <strong>Nothing tracked yet</strong>
+            <span>Type a title above to add your first task.</span>
             <div class="empty-actions">
-                <button type="button" class="primary" id="emptyReconcileBtn">Import from GitHub</button>
                 <button type="button" id="emptySyncBtn">Sync from TOML / DB</button>
                 <button type="button" id="emptyDbBtn">Open database</button>
             </div>
@@ -1825,7 +2112,6 @@
             <p class="disc-hint hidden" id="emptyLoadError"></p>
         </div>
         <div id="sectionsRoot"></div>
-        <div id="reconcileDock" class="reconcile-dock" aria-label="Reconcile"></div>
     </main>
     <footer class="foot" id="foot">
         <div id="footMeta"></div>
@@ -1835,18 +2121,24 @@
             <h3 id="doneModalTitle">Marked done</h3>
             <p id="doneModalBody"></p>
             <div class="modal-actions stack">
-                <button type="button" class="primary" id="doneArchiveBtn">Archive</button>
-                <button type="button" id="doneSessionBtn">Hide until refresh</button>
+                <button type="button" class="primary" id="donePersistBtn">Done</button>
+                <button type="button" id="doneSessionBtn">Hide for now</button>
                 <button type="button" class="danger" id="doneRemoveBtn">Delete permanently</button>
                 <button type="button" id="doneUndoBtn">Cancel</button>
             </div>
         </div>
     </div>
-    <div class="modal-backdrop hidden" id="mergeModal" role="dialog" aria-modal="true" aria-labelledby="mergeModalTitle">
+    <div class="modal-backdrop task-page-modal hidden" id="taskPageModal" role="dialog" aria-modal="true"
+        aria-label="Task details">
+        <div class="modal-card" id="taskPageModalCard"></div>
+    </div>
+    <div class="modal-backdrop hidden" id="mergeModal" role="dialog" aria-modal="true"
+        aria-labelledby="mergeModalTitle">
         <div class="modal-card" style="width: min(26rem, 100%);">
             <h3 id="mergeModalTitle">Nest tasks</h3>
             <p id="mergeModalHint" class="disc-hint" style="margin-bottom: 0.35rem;">
-                Combine related rows under one initiative. Selected tasks become nested subtasks; each keeps its own PRs, tags, and notes.
+                Combine related rows under one initiative. Selected tasks become nested subtasks; each keeps its own
+                PRs, tags, and notes.
             </p>
             <div class="merge-modal-primary">
                 <label for="mergePrimarySelect" class="field-label" style="margin-bottom: 0.25rem;">Parent task</label>
@@ -1865,15 +2157,29 @@
         const savedUi = vscode.getState() || {};
         let filter = savedUi.filter || "open";
         let groupMode = savedUi.groupMode || "list";
+        // List vs Board lives in webview state (vscode.setState), not a
+        // contributed setting: it is a per-panel view preference, and it
+        // survives reloads the same way filter/groupMode already do.
+        let viewMode = savedUi.viewMode === "board" ? "board" : "list";
         let pillFilter = savedUi.pillFilter || "allOpen";
         let expandedId = savedUi.expandedId || null;
         let workspaceOnly = savedUi.workspaceOnly || false;
+        let hideNested = savedUi.hideNested !== false;
+        let collapsedNestIds = new Set(
+            Array.isArray(savedUi.collapsedNestIds) ? savedUi.collapsedNestIds : []
+        );
         let boot = { activeTasks: { todos: [] }, generatedAt: "", discovery: {} };
         let draggedId = null;
         let doneModalTodoId = null;
         let doneModalTrap = null;
         let searchText = "";
         let kbdFocusId = savedUi.kbdFocusId || null;
+        // renderNow() rebuilds every card, so a store refresh mid-typing would
+        // replace the focused input and drop the keystrokes. While an inline edit
+        // holds focus we park the render and replay it on blur.
+        let inlineEditing = null;
+        let renderDeferred = false;
+        let lastEditFocus = null;
         let awaitingPayload = !savedUi.hasRendered;
         setTimeout(() => {
             if (awaitingPayload && !boot.generatedAt && !boot.notice && !boot.loadError) {
@@ -1889,12 +2195,10 @@
         }, 15000);
         let renderScheduled = false;
         let searchDebounce = null;
-        const RECONCILE_CARD_CAP = 15;
         let refreshSpinTimer = null;
 
         function setRefreshSpinning(on) {
-            const ids = ["reloadBtn", "reconcileRefreshBtn"];
-            ids.forEach((id) => {
+            ["reloadBtn"].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) {
                     el.classList.toggle("spinning", on);
@@ -1922,25 +2226,27 @@
             renderScheduled = true;
             requestAnimationFrame(() => {
                 renderScheduled = false;
+                if (inlineEditing) {
+                    renderDeferred = true;
+                    return;
+                }
                 renderNow();
             });
         }
 
-        const GROUP_ORDER = ["list", "repo", "status"];
-        const GROUP_LABEL = { list: "List", repo: "Repo", status: "Status" };
-
-        function updateGroupToggleUi() {
-            const btn = document.getElementById("groupToggle");
-            if (!btn) return;
-            const label = GROUP_LABEL[groupMode] || groupMode;
-            btn.title = "Group: " + label + " (click to change)";
-            btn.setAttribute("aria-label", "Grouping: " + label);
+        function releaseDeferredRender() {
+            inlineEditing = null;
+            if (!renderDeferred) return;
+            renderDeferred = false;
+            scheduleRender();
         }
 
-        function cycleGroupMode() {
-            const idx = GROUP_ORDER.indexOf(groupMode);
-            const next = GROUP_ORDER[(idx + 1) % GROUP_ORDER.length];
-            setGroup(next);
+        const GROUP_MODES = new Set(["list", "repo", "status"]);
+
+        function updateGroupPickerUi() {
+            const select = document.getElementById("groupSelect");
+            if (!select) return;
+            select.value = GROUP_MODES.has(groupMode) ? groupMode : "list";
         }
 
         function todoMatchesWorkspace(todo) {
@@ -1961,7 +2267,7 @@
             return false;
         }
 
-        function ciBadgeForTodo(todo) {
+        function ciPillForTodo(todo) {
             const map = boot.discovery && boot.discovery.prStatusByTodoId;
             const ci = map ? map[todo.id] : null;
             if (!ci) return null;
@@ -1972,45 +2278,6 @@
             if (ci.reviewDecision) el.textContent += " · " + ci.reviewDecision;
             el.title = (ci.checks || []).map((c) => c.name + ": " + (c.conclusion || c.status)).join("\n");
             return el;
-        }
-
-        function discActionBtn(label, onClick) {
-            const b = document.createElement("button");
-            b.type = "button";
-            b.textContent = label;
-            b.addEventListener("click", (ev) => {
-                ev.stopPropagation();
-                onClick();
-            });
-            return b;
-        }
-
-        function attachSelectForPr(pr, card) {
-            const todos = (boot.activeTasks.todos || []).filter((t) => !t.done);
-            const row = document.createElement("div");
-            row.className = "disc-actions";
-            row.appendChild(discActionBtn("Add row", () => {
-                vscode.postMessage({ type: "reconcileAddPr", pr });
-            }));
-            if (!todos.length) {
-                card.appendChild(row);
-                return;
-            }
-            const sel = document.createElement("select");
-            todos.forEach((t) => {
-                const o = document.createElement("option");
-                o.value = t.id;
-                o.textContent = t.title || t.label || "Task";
-                sel.appendChild(o);
-            });
-            row.appendChild(sel);
-            row.appendChild(discActionBtn("Attach", () => {
-                vscode.postMessage({ type: "reconcileAttachPr", workId: sel.value, pr });
-            }));
-            row.appendChild(discActionBtn("Dismiss", () => {
-                vscode.postMessage({ type: "reconcileDismiss", kind: "pr", refKey: pr.url });
-            }));
-            card.appendChild(row);
         }
 
         const shortAt = (s) => {
@@ -2024,30 +2291,14 @@
             return mm + "-" + dd + " " + hh + ":" + mi;
         };
 
-        const relativeScanAge = (iso) => {
-            if (!iso) return "";
-            const then = new Date(iso).getTime();
-            if (Number.isNaN(then)) return "";
-            const mins = Math.round((Date.now() - then) / 60000);
-            if (mins < 1) return "just now";
-            if (mins < 60) return mins + " min ago";
-            const hrs = Math.round(mins / 60);
-            if (hrs < 48) return hrs + " hr ago";
-            return Math.round(hrs / 24) + " d ago";
-        };
-
-        const scanIsStale = (iso) => {
-            if (!iso) return false;
-            const then = new Date(iso).getTime();
-            return !Number.isNaN(then) && Date.now() - then > 60 * 60 * 1000;
-        };
-
         const REPO_VIS = {
             instawork: { key: "instawork", name: "Instawork", icon: "⬡", short: "IW", accent: "#2563eb" },
             finch: { key: "finch", name: "Finch", icon: "◆", short: "F", accent: "#0d9488" },
             infrastructure: { key: "infrastructure", name: "Infrastructure", icon: "▣", short: "IF", accent: "#7c3aed" },
         };
         const REPO_ORDER = ["instawork", "finch", "infrastructure"];
+        /** Deepest nesting level that still gets its own density step in the CSS. */
+        const MAX_DEPTH_TIER = 2;
 
         /** Keep palette / overrides in sync with src/tagsUtil.ts */
         const TAG_PALETTE = [
@@ -2097,20 +2348,21 @@
         }
 
         const STATUS_KEY_OPTIONS = [
+            ["backlog", "Backlog"],
+            ["progress", "In Progress"],
+            ["prioritized", "Prioritized"],
+            ["review", "In Review"],
             ["blocked", "Blocked"],
-            ["review", "In review"],
-            ["progress", "In progress"],
-            ["ready", "Ready / merge"],
-            ["paused", "Paused"],
-            ["other", "Other"],
+            ["done", "Done"],
+            ["wont_fix", "Won't fix"],
         ];
 
         const STATUS_LABEL_PRESETS = [
-            ["in progress", "In progress"],
-            ["review", "In review"],
+            ["backlog", "Backlog"],
+            ["in progress", "In Progress"],
+            ["prioritized", "Prioritized"],
+            ["review", "In Review"],
             ["blocked", "Blocked"],
-            ["ready to merge", "Ready to merge"],
-            ["paused", "Paused"],
             ["open PR", "Open PR"],
             ["draft PR", "Draft PR"],
         ];
@@ -2130,14 +2382,20 @@
         function statusKeyDisplayLabel(todo) {
             const k = (todo.status_key || "").toLowerCase();
             const hit = STATUS_KEY_OPTIONS.find(([val]) => val === k);
-            if (hit) return hit[1];
-            return statusTone(todo.status) === "default" ? "Other" : statusTone(todo.status);
+            if (hit) return hit[1].replace(/ \(closes\)$/, "");
+            return statusTone(todo.status) === "backlog" ? "Backlog" : statusTone(todo.status);
         }
 
         function statusToneForTodo(todo) {
             const k = (todo.status_key || "").toLowerCase();
-            if (k === "blocked" || k === "review" || k === "progress" || k === "ready" || k === "paused") {
+            if (
+                k === "blocked" || k === "review" || k === "progress"
+                || k === "prioritized" || k === "backlog"
+            ) {
                 return k;
+            }
+            if (k === "ready" || k === "paused" || k === "other") {
+                return "backlog";
             }
             return statusTone(todo.status);
         }
@@ -2145,12 +2403,27 @@
         function urgencyClassForTodo(todo) {
             if (todo.done) return "muted";
             const p = typeof todo.priority === "number" ? todo.priority : 1;
-            if (p >= 3) return "high";
+            if (p <= 0) return "high";
             const tone = statusToneForTodo(todo);
             if (tone === "blocked") return "high";
-            if (tone === "review" || tone === "progress") return p >= 2 ? "high" : "medium";
-            if (tone === "ready") return "low";
-            return p >= 2 ? "medium" : "muted";
+            if (tone === "review" || tone === "progress" || tone === "prioritized") {
+                return p <= 1 ? "high" : "medium";
+            }
+            if (tone === "backlog") return "low";
+            return p <= 1 ? "medium" : "muted";
+        }
+
+        function markTodoDone(todoId, reason) {
+            vscode.postMessage({
+                type: "setDoneMode",
+                id: todoId,
+                mode: "done",
+                reason: reason || "manual",
+            });
+        }
+
+        function isDoneTone(tone) {
+            return tone === "done" || tone === "wont_fix";
         }
 
         function ciDotForTodo(todo) {
@@ -2186,13 +2459,27 @@
         }
 
         const STATUS_BUCKETS = [
+            { tone: "backlog", label: "Backlog" },
+            { tone: "progress", label: "In Progress" },
+            { tone: "prioritized", label: "Prioritized" },
+            { tone: "review", label: "In Review" },
             { tone: "blocked", label: "Blocked" },
-            { tone: "review", label: "In review" },
-            { tone: "progress", label: "In progress" },
-            { tone: "ready", label: "Ready / merge" },
-            { tone: "paused", label: "Paused" },
-            { tone: "default", label: "Other" },
         ];
+
+        const ARCHIVE_BUCKETS = [
+            { tone: "done", label: "Done" },
+            { tone: "wont_fix", label: "Won't fix" },
+        ];
+
+        const STATUS_TONE_DOT = {
+            blocked: "var(--status-blocked-fg)",
+            review: "var(--status-review-fg)",
+            progress: "var(--status-progress-fg)",
+            prioritized: "var(--status-prioritized-fg)",
+            backlog: "var(--status-backlog-fg)",
+            done: "var(--status-ready-fg)",
+            wont_fix: "var(--muted)",
+        };
 
         const GITHUB_REPO = {
             instawork: "Instawork/instawork",
@@ -2216,9 +2503,8 @@
             if (/block|fail|red|tach/.test(s)) return "blocked";
             if (/review|duncan|waiting/.test(s)) return "review";
             if (/progress|step|walkthrough|active branch/.test(s)) return "progress";
-            if (/ready|green|merge|ci green|pushed/.test(s)) return "ready";
-            if (/pause|paused/.test(s)) return "paused";
-            return "default";
+            if (/priorit/.test(s)) return "prioritized";
+            return "backlog";
         }
 
         function prCountForTodo(todo) {
@@ -2294,19 +2580,9 @@
             root.appendChild(hint);
         }
 
-        function reconcileItemCount() {
-            const disc = boot.discovery || {};
-            const untracked = new Set((disc.untrackedCloudAgents || []).map((a) => a.agentId));
-            return (disc.missingPrs || []).length + untracked.size + (disc.staleTrackedPrs || []).length;
-        }
-
         function applyPillFilter(todos) {
             if (pillFilter === "hasPr") {
                 return todos.filter((t) => todoHasPr(t));
-            }
-            if (pillFilter === "needsReconcile") {
-                const staleIds = new Set((boot.discovery?.staleTrackedPrs || []).map((r) => r.todoId));
-                return todos.filter((t) => staleIds.has(t.id));
             }
             if (pillFilter === "inReview") {
                 return todos.filter((t) => statusToneForTodo(t) === "review");
@@ -2322,15 +2598,44 @@
             { id: "hasPr", label: "Has PR" },
             { id: "inReview", label: "In review" },
             { id: "blocked", label: "Blocked" },
-            { id: "needsReconcile", label: "Needs reconcile" },
             { id: "workspace", label: "This workspace" },
         ];
 
+        let lastPillSignature = "";
+
         function renderFilterPills(openTodos) {
             const root = document.getElementById("filterPills");
-            root.replaceChildren();
-            const rec = reconcileItemCount();
             const wsOpen = (boot.activeTasks.todos || []).filter((t) => !t.done && todoMatchesWorkspace(t)).length;
+            const hasPr = openTodos.filter((t) => todoHasPr(t)).length;
+            const signature = [
+                openTodos.length,
+                hasPr,
+                wsOpen,
+                pillFilter,
+                workspaceOnly ? 1 : 0,
+                hideNested ? 1 : 0,
+            ].join("|");
+            if (signature === lastPillSignature && root.childElementCount > 0) {
+                updateHideNestedUi();
+                return;
+            }
+            lastPillSignature = signature;
+            root.replaceChildren();
+
+            const hideBtn = document.createElement("button");
+            hideBtn.type = "button";
+            hideBtn.className = "pill hide-nested";
+            hideBtn.id = "hideNestedBtn";
+            hideBtn.setAttribute("role", "switch");
+            hideBtn.textContent = "Hide nested";
+            hideBtn.addEventListener("click", () => setHideNested(!hideNested));
+            root.appendChild(hideBtn);
+            const sep = document.createElement("span");
+            sep.className = "pill hide-nested-sep";
+            sep.setAttribute("aria-hidden", "true");
+            root.appendChild(sep);
+            updateHideNestedUi();
+
             PILL_DEFS.forEach((def) => {
                 const btn = document.createElement("button");
                 btn.type = "button";
@@ -2344,8 +2649,7 @@
                 btn.appendChild(document.createTextNode(def.label));
                 let count = null;
                 if (def.id === "allOpen") count = openTodos.length;
-                else if (def.id === "hasPr") count = openTodos.filter((t) => todoHasPr(t)).length;
-                else if (def.id === "needsReconcile") count = rec;
+                else if (def.id === "hasPr") count = hasPr;
                 else if (def.id === "workspace") count = wsOpen;
                 if (count != null) {
                     const c = document.createElement("span");
@@ -2368,21 +2672,6 @@
             scheduleRender();
         }
 
-        function cardAccentFor(todo) {
-            if (todo.done) return "var(--border)";
-            const key = repoKey(todo.repo);
-            if (key && REPO_VIS[key]) return REPO_VIS[key].accent;
-            const map = {
-                blocked: "var(--status-blocked-fg)",
-                review: "var(--status-review-fg)",
-                progress: "var(--status-progress-fg)",
-                ready: "var(--status-ready-fg)",
-                paused: "var(--muted)",
-                default: "var(--accent)",
-            };
-            return map[statusTone(todo.status)] || map.default;
-        }
-
         function primaryHref(todo) {
             if (todo.pr_url) return todo.pr_url;
             if (todo.pr_number && todo.repo) {
@@ -2398,9 +2687,12 @@
                 ...(vscode.getState() || {}),
                 filter,
                 groupMode,
+                viewMode,
                 pillFilter,
                 expandedId,
                 workspaceOnly,
+                hideNested,
+                collapsedNestIds: [...collapsedNestIds],
                 ...extra,
             });
         }
@@ -2417,36 +2709,6 @@
             const href = a.getAttribute("href");
             if (!href || !/^https?:/i.test(href)) return;
             a.addEventListener("click", (ev) => openExternalUrl(href, ev));
-        }
-
-        function renderInlineMd(container, text) {
-            const tokenRe = /\[([^\]]+)\]\((https?:[^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*/g;
-            let last = 0;
-            let m;
-            while ((m = tokenRe.exec(text))) {
-                if (m.index > last) {
-                    container.appendChild(document.createTextNode(text.slice(last, m.index)));
-                }
-                if (m[2]) {
-                    const a = document.createElement("a");
-                    a.href = m[2];
-                    a.textContent = m[1];
-                    wireExternalAnchor(a);
-                    container.appendChild(a);
-                } else if (m[3]) {
-                    const c = document.createElement("code");
-                    c.textContent = m[3];
-                    container.appendChild(c);
-                } else if (m[4]) {
-                    const st = document.createElement("strong");
-                    st.textContent = m[4];
-                    container.appendChild(st);
-                }
-                last = tokenRe.lastIndex;
-            }
-            if (last < text.length) {
-                container.appendChild(document.createTextNode(text.slice(last)));
-            }
         }
 
         function copyToClipboard(text) {
@@ -2475,7 +2737,34 @@
             return el;
         }
 
-        function buildMeta(todo) {
+        // Mirrors planPathFromUrl in the host. The host re-validates before
+        // opening anything, so this only decides how the chip renders.
+        function isPlanUrl(url) {
+            if (typeof url !== "string") return false;
+            const u = url.trim();
+            if (!u.endsWith(".plan.md")) return false;
+            return u.startsWith("~/.cursor/plans/") || u.includes("/.cursor/plans/");
+        }
+
+        function gitProbeLabel(gs) {
+            if (!gs.exists) return "wt missing";
+            if (gs.error) return "git ?";
+            const bits = [];
+            if (gs.dirtyCount > 0) bits.push(gs.dirtyCount + " dirty");
+            if (gs.ahead > 0) bits.push("↑" + gs.ahead);
+            if (gs.behind > 0) bits.push("↓" + gs.behind);
+            return bits.length ? bits.join(" ") : "clean";
+        }
+
+        function gitProbeTitle(gs) {
+            if (!gs.exists) return "Worktree path does not exist: " + gs.path;
+            if (gs.error) return gs.error;
+            const branch = gs.detached ? "detached" : (gs.branch || "unknown branch");
+            const last = gs.lastCommitIso ? " · last commit " + gs.lastCommitIso.slice(0, 10) : "";
+            return branch + " · " + gs.dirtyCount + " changed · ahead " + gs.ahead + " behind " + gs.behind + last;
+        }
+
+        function buildMeta(todo, opts) {
             const meta = document.createElement("div");
             meta.className = "todo-meta";
 
@@ -2516,7 +2805,25 @@
                 c.appendChild(a);
                 meta.appendChild(c);
             });
+            const gs = (boot.discovery && boot.discovery.gitStatusByTodoId || {})[todo.id];
+            if (gs) {
+                const c = chip("git", gitProbeLabel(gs));
+                c.title = gitProbeTitle(gs);
+                if (!gs.exists || gs.error) c.classList.add("bad");
+                else if (gs.dirtyCount > 0 || gs.behind > 0) c.classList.add("warn");
+                meta.appendChild(c);
+            }
             (todo.links || []).forEach((link) => {
+                if (isPlanUrl(link.url)) {
+                    const c = chip("plan", "plan");
+                    c.title = "Open " + link.url;
+                    c.addEventListener("click", (ev) => {
+                        ev.stopPropagation();
+                        vscode.postMessage({ type: "openPlan", path: link.url });
+                    });
+                    meta.appendChild(c);
+                    return;
+                }
                 const c = chip("link");
                 const a = document.createElement("a");
                 a.href = link.url;
@@ -2529,7 +2836,7 @@
             if (todo.waiting_on) {
                 meta.appendChild(chip("branch", "⏳ " + todo.waiting_on));
             }
-            const visibleCap = 3;
+            const visibleCap = opts && opts.cap != null ? opts.cap : 3;
             if (meta.childNodes.length > visibleCap) {
                 const chips = [...meta.children];
                 const overflow = document.createElement("span");
@@ -2588,13 +2895,45 @@
                 control = document.createElement("input");
                 control.type = "checkbox";
                 control.checked = Boolean(value);
+            } else if (opts && opts.type === "date") {
+                control = document.createElement("input");
+                control.type = "date";
+                control.value = value ? String(value).slice(0, 10) : "";
             } else {
                 control = document.createElement("input");
                 control.type = "text";
                 control.value = value || "";
             }
             control.dataset.field = opts.field;
+            if (opts && opts.block) wrap.classList.add("field-block");
             wrap.appendChild(control);
+            return wrap;
+        }
+
+        function propGroup(label, opts) {
+            const collapsible = Boolean(opts && opts.collapsible);
+            const grid = document.createElement("div");
+            grid.className = "field-grid";
+            let wrap;
+            if (collapsible) {
+                wrap = document.createElement("details");
+                wrap.className = "task-page-group";
+                if (opts && opts.open) wrap.open = true;
+                const summary = document.createElement("summary");
+                summary.textContent = label;
+                wrap.appendChild(summary);
+            } else {
+                wrap = document.createElement("div");
+                wrap.className = "task-page-group";
+                if (label) {
+                    const l = document.createElement("span");
+                    l.className = "group-label";
+                    l.textContent = label;
+                    wrap.appendChild(l);
+                }
+            }
+            wrap.appendChild(grid);
+            wrap.__grid = grid;
             return wrap;
         }
 
@@ -2780,11 +3119,11 @@
                     .join(", ");
                 const ok = window.confirm(
                     "Nest " +
-                        mergeIds.length +
-                        " task(s) under \"" +
-                        (todo.title || todo.label) +
-                        "\"?\n\n" +
-                        titles
+                    mergeIds.length +
+                    " task(s) under \"" +
+                    (todo.title || todo.label) +
+                    "\"?\n\n" +
+                    titles
                 );
                 if (!ok) return;
                 postMergeWorkRows(todo.id, mergeIds);
@@ -2793,38 +3132,89 @@
             return wrap;
         }
 
+        function taskPageChipRow(todo) {
+            const row = document.createElement("div");
+            row.className = "task-page-chips";
+            if (!todo.done) {
+                const tone = statusToneForTodo(todo);
+                const pill = document.createElement("span");
+                pill.className = "status-pill tone-" + tone;
+                pill.textContent = statusKeyDisplayLabel(todo);
+                pill.title = todo.status || statusKeyDisplayLabel(todo);
+                row.appendChild(pill);
+            }
+            const ci = ciPillForTodo(todo);
+            if (ci) row.appendChild(ci);
+            const pr = primaryPrLinkChip(todo);
+            if (pr) row.appendChild(pr);
+            const meta = buildMeta(todo, { cap: Infinity });
+            if (meta) [...meta.children].forEach((node) => row.appendChild(node));
+            return row.childNodes.length ? row : null;
+        }
+
         function buildExpandPanel(todo) {
             const panel = document.createElement("div");
             panel.className = "task-expand-panel";
-            const grid = document.createElement("div");
-            grid.className = "field-grid";
-            grid.appendChild(fieldInput("Title", todo.title || todo.label, { field: "title" }));
-            grid.appendChild(fieldInput("Status", todo.status, {
+            const page = document.createElement("div");
+            page.className = "task-page";
+
+            // Every control stays inside `fields` — the save handler enumerates
+            // [data-field] from here, so a control rendered outside it would
+            // silently stop persisting.
+            const fields = document.createElement("div");
+            fields.className = "task-page-fields";
+
+            const head = document.createElement("div");
+            head.className = "task-page-head";
+            const titleInput = document.createElement("input");
+            titleInput.type = "text";
+            titleInput.className = "task-page-title";
+            titleInput.value = todo.title || todo.label || "";
+            titleInput.placeholder = "Untitled";
+            titleInput.dataset.field = "title";
+            titleInput.setAttribute("aria-label", "Task title");
+            head.appendChild(titleInput);
+            const chips = taskPageChipRow(todo);
+            if (chips) head.appendChild(chips);
+            fields.appendChild(head);
+
+            const main = propGroup("");
+            main.__grid.appendChild(fieldInput("Status", todo.status, {
                 field: "status",
                 type: "select",
                 matchStatusLabel: true,
                 options: statusLabelSelectOptions(todo.status),
             }));
-            grid.appendChild(fieldInput("Next action", todo.next_action, { field: "next_action" }));
-            grid.appendChild(fieldInput("Priority (0–3)", todo.priority != null ? todo.priority : 1, {
+            // Also the click-to-move fallback for the board: same write path as
+            // dragging a card into another column.
+            main.__grid.appendChild(fieldInput("Bucket", todo.status_key, {
+                field: "status_key",
+                type: "select",
+                options: STATUS_KEY_OPTIONS,
+            }));
+            main.__grid.appendChild(fieldInput("Next action", todo.next_action, { field: "next_action" }));
+            main.__grid.appendChild(fieldInput("Priority", todo.priority != null ? todo.priority : 1, {
                 field: "priority",
                 type: "number",
                 min: 0,
                 max: 3,
             }));
-            grid.appendChild(fieldInput("Pinned", todo.pinned, { field: "pinned", type: "checkbox" }));
-            grid.appendChild(fieldInput("Waiting on", todo.waiting_on, { field: "waiting_on" }));
+            main.__grid.appendChild(fieldInput("Pinned", todo.pinned, { field: "pinned", type: "checkbox" }));
+            main.__grid.appendChild(fieldInput("Due", todo.due, { field: "due", type: "date" }));
+            main.__grid.appendChild(fieldInput("Waiting on", todo.waiting_on, { field: "waiting_on" }));
             const blockerOpts = [["", "—"]];
             (boot.activeTasks.todos || []).filter((t) => !t.done && t.id !== todo.id).forEach((t) => {
                 blockerOpts.push([t.id, (t.title || t.label || "Task").slice(0, 48)]);
             });
-            grid.appendChild(fieldInput("Blocked by", todo.blocked_by_id, {
+            main.__grid.appendChild(fieldInput("Blocked by", todo.blocked_by_id, {
                 field: "blocked_by_id",
                 type: "select",
                 options: blockerOpts,
             }));
-            grid.appendChild(fieldInput("Cloud agent id", todo.cloud_agent_id, { field: "cloud_agent_id" }));
-            grid.appendChild(fieldInput("Repo", todo.repo, {
+            fields.appendChild(main);
+
+            const work = propGroup("Where the work lives");
+            work.__grid.appendChild(fieldInput("Repo", todo.repo, {
                 field: "repo",
                 type: "select",
                 options: [
@@ -2832,25 +3222,62 @@
                     ["instawork", "instawork"],
                     ["finch", "finch"],
                     ["infrastructure", "infrastructure"],
+                    ["other", "other"],
                 ],
             }));
-            grid.appendChild(fieldInput("Branch", todo.branch, { field: "branch" }));
-            grid.appendChild(fieldInput("Worktree", todo.worktree, { field: "worktree" }));
-            grid.appendChild(fieldInput("PR number", todo.pr_number, { field: "pr_number", type: "number" }));
-            grid.appendChild(fieldInput("PR URL", todo.pr_url, { field: "pr_url" }));
-            grid.appendChild(fieldInput("Extra PRs (JSON)", JSON.stringify(todo.prs || [], null, 2), {
+            work.__grid.appendChild(fieldInput("Branch", todo.branch, { field: "branch" }));
+            work.__grid.appendChild(fieldInput("Worktree", todo.worktree, { field: "worktree" }));
+            work.__grid.appendChild(fieldInput("PR number", todo.pr_number, { field: "pr_number", type: "number" }));
+            work.__grid.appendChild(fieldInput("PR URL", todo.pr_url, { field: "pr_url" }));
+            fields.appendChild(work);
+
+            // buildTagFieldEditor prints its own "Tags" label.
+            const tagsGroup = propGroup("");
+            const vocab = (boot.activeTasks && boot.activeTasks.tagVocab) || [];
+            tagsGroup.__grid.appendChild(buildTagFieldEditor(todo, vocab));
+            fields.appendChild(tagsGroup);
+
+            const notesGroup = propGroup("");
+            notesGroup.__grid.appendChild(fieldInput("Notes", todo.notes, {
+                field: "notes",
+                type: "textarea",
+                block: true,
+            }));
+            fields.appendChild(notesGroup);
+
+            const adv = propGroup("Advanced", { collapsible: true });
+            adv.__grid.appendChild(fieldInput("Cloud agent id", todo.cloud_agent_id, { field: "cloud_agent_id" }));
+            adv.__grid.appendChild(fieldInput("Source URL", todo.source_url, { field: "source_url" }));
+            adv.__grid.appendChild(fieldInput("Stream source", todo.stream_source, {
+                field: "stream_source",
+                type: "select",
+                options: [
+                    ["", "—"],
+                    ["manual", "manual"],
+                    ["slack", "slack"],
+                    ["spark_mail", "spark_mail"],
+                    ["github", "github"],
+                    ["asana", "asana"],
+                ],
+            }));
+            adv.__grid.appendChild(fieldInput("Channel", todo.channel, { field: "channel" }));
+            adv.__grid.appendChild(fieldInput("Extra PRs (JSON)", JSON.stringify(todo.prs || [], null, 2), {
                 field: "prs_json",
                 type: "textarea",
+                block: true,
             }));
-            grid.appendChild(fieldInput("Links (JSON)", JSON.stringify(todo.links || [], null, 2), {
+            adv.__grid.appendChild(fieldInput("Links (JSON)", JSON.stringify(todo.links || [], null, 2), {
                 field: "links_json",
                 type: "textarea",
+                block: true,
             }));
-            const vocab = (boot.activeTasks && boot.activeTasks.tagVocab) || [];
-            grid.appendChild(buildTagFieldEditor(todo, vocab));
-            grid.appendChild(fieldInput("Notes", todo.notes, { field: "notes", type: "textarea" }));
-            panel.appendChild(grid);
-            panel.appendChild(buildMergeIntoSection(todo));
+            fields.appendChild(adv);
+
+            page.appendChild(fields);
+
+            const nest = propGroup("Nest other tasks here", { collapsible: true });
+            nest.__grid.appendChild(buildMergeIntoSection(todo));
+            page.appendChild(nest);
 
             const actions = document.createElement("div");
             actions.className = "expand-actions";
@@ -2860,42 +3287,48 @@
             saveBtn.textContent = "Save to database";
             saveBtn.addEventListener("click", (ev) => {
                 ev.stopPropagation();
-                const fields = {};
-                grid.querySelectorAll("[data-field]").forEach((el) => {
+                const updates = {};
+                fields.querySelectorAll("[data-field]").forEach((el) => {
                     const key = el.dataset.field;
                     if (!key) return;
                     if (key === "pr_number") {
                         const raw = el.value.trim();
-                        fields.pr_number = raw ? parseInt(raw, 10) : null;
+                        updates.pr_number = raw ? parseInt(raw, 10) : null;
                         return;
                     }
                     if (key === "priority") {
                         const raw = el.value.trim();
-                        fields.priority = raw === "" ? 1 : parseInt(raw, 10);
+                        updates.priority = raw === "" ? 1 : parseInt(raw, 10);
                         return;
                     }
                     if (key === "pinned") {
-                        fields.pinned = el.checked;
+                        updates.pinned = el.checked;
                         return;
                     }
                     if (key === "blocked_by_id") {
-                        fields.blocked_by_id = el.value.trim() || null;
+                        updates.blocked_by_id = el.value.trim() || null;
                         return;
                     }
-                    fields[key] = el.value;
+                    updates[key] = el.value;
                 });
-                const tagEditor = grid.querySelector(".tag-field-editor");
+                const tagEditor = fields.querySelector(".tag-field-editor");
                 if (tagEditor && typeof tagEditor.__getTags === "function") {
-                    fields.tags = tagEditor.__getTags();
+                    updates.tags = tagEditor.__getTags();
                 }
-                vscode.postMessage({ type: "updateTodo", id: todo.id, fields });
-                const card = document.querySelector(
-                    '.task-card[data-id="' + CSS.escape(todo.id) + '"]'
-                );
-                if (card) {
-                    card.classList.add("saved");
-                    setTimeout(() => card.classList.remove("saved"), 900);
+                const archiveKey = updates.status_key;
+                if (archiveKey === "done" || archiveKey === "wont_fix") {
+                    delete updates.status_key;
+                    if (Object.keys(updates).length) {
+                        vscode.postMessage({ type: "updateTodo", id: todo.id, fields: updates });
+                    }
+                    markTodoDone(
+                        todo.id,
+                        archiveKey === "wont_fix" ? "wont_fix" : "manual"
+                    );
+                    return;
                 }
+                vscode.postMessage({ type: "updateTodo", id: todo.id, fields: updates });
+                flashSaved(todo.id);
             });
             const collapseBtn = document.createElement("button");
             collapseBtn.type = "button";
@@ -2915,6 +3348,19 @@
                     vscode.postMessage({ type: "openWorktree", path: todo.worktree });
                 });
                 actions.appendChild(wtBtn);
+            }
+            if (!todo.cloud_agent_id && REPO_VIS[repoKey(todo.repo)]) {
+                const launchBtn = document.createElement("button");
+                launchBtn.type = "button";
+                launchBtn.textContent = "Launch agent";
+                launchBtn.title = "Start a cloud subagent on this task's branch";
+                launchBtn.addEventListener("click", (ev) => {
+                    ev.stopPropagation();
+                    launchBtn.disabled = true;
+                    launchBtn.textContent = "Launching…";
+                    vscode.postMessage({ type: "launchAgent", id: todo.id });
+                });
+                actions.appendChild(launchBtn);
             }
             const dbBtn = document.createElement("button");
             dbBtn.type = "button";
@@ -2974,15 +3420,172 @@
             }
         }
 
-        function buildTaskCard(todo, childrenByParent) {
+        function flashSaved(todoId) {
+            const card = cardElementById(todoId);
+            if (!card) return;
+            card.classList.add("saved");
+            setTimeout(() => card.classList.remove("saved"), 900);
+        }
+
+        function autoGrow(el) {
+            el.style.height = "auto";
+            el.style.height = el.scrollHeight + "px";
+        }
+
+        function setEditableText(el, value, o) {
+            const text = value == null ? "" : String(value);
+            const shown = text || o.emptyLabel || "";
+            el.dataset.value = text;
+            el.textContent = shown;
+            el.classList.toggle("is-empty", !text);
+            // Truncated: notes can run for paragraphs, and the visible text is
+            // clamped to two lines, so an untruncated name reads far longer than
+            // anything on screen.
+            const named = shown.length > 80 ? shown.slice(0, 80) + "…" : shown;
+            el.setAttribute("aria-label", "Edit " + (o.label || "field") + ": " + named);
+        }
+
+        function applyLocalField(todoId, field, value) {
+            const row = ((boot.activeTasks && boot.activeTasks.todos) || [])
+                .find((t) => t.id === todoId);
+            if (row) row[field] = value;
+        }
+
+        // Collapsed state stays a div so long text wraps and line-clamps the way
+        // it always has; the textarea only exists while you are actually editing.
+        // An <input> here would truncate wrapped titles in a narrow panel.
+        function editableText(todo, field, value, opts) {
+            const o = opts || {};
+            const el = document.createElement("div");
+            el.className = "editable" + (o.className ? " " + o.className : "");
+            el.dataset.editField = field;
+            // Deliberately a real tab stop and not roving like .task-card:
+            // setKbdFocus() does not re-render, so a roving tabindex here goes
+            // stale and leaves the field unreachable by keyboard entirely.
+            el.tabIndex = 0;
+            el.setAttribute("role", "button");
+            if (o.hint) el.title = o.hint;
+            setEditableText(el, value, o);
+            const begin = (ev) => {
+                ev.stopPropagation();
+                beginInlineEdit(el, todo, field, o);
+            };
+            el.addEventListener("click", begin);
+            el.addEventListener("keydown", (ev) => {
+                if (ev.key !== "Enter" && ev.key !== " ") return;
+                ev.preventDefault();
+                begin(ev);
+            });
+            return el;
+        }
+
+        // Commits on blur and on Enter, reverts on Escape. Writes go through the
+        // same updateTodo message the expand panel's Save button posts, so there
+        // is one write path into the database rather than two.
+        //
+        // The read-state div is hidden rather than replaced: keeping it means the
+        // tooltip and any wiring buildTaskCard added survive the round trip, and
+        // there is a stable node to hand focus back to.
+        function beginInlineEdit(el, todo, field, o) {
+            if (!el.isConnected) return;
+            const original = el.dataset.value || "";
+            const ta = document.createElement("textarea");
+            ta.className = "inline-edit" + (o.className ? " " + o.className : "");
+            ta.value = original;
+            ta.rows = 1;
+            ta.spellcheck = false;
+            if (o.placeholder) ta.placeholder = o.placeholder;
+            ta.setAttribute("aria-label", o.label || field);
+
+            el.style.display = "none";
+            el.after(ta);
+            // Never gate rendering on an edit that failed to mount: a stuck
+            // inlineEditing would park every future render for good.
+            if (!ta.isConnected) {
+                el.style.display = "";
+                return;
+            }
+            inlineEditing = todo.id;
+            autoGrow(ta);
+            ta.focus();
+            ta.setSelectionRange(ta.value.length, ta.value.length);
+
+            let settled = false;
+            const finish = (commit, refocus) => {
+                if (settled) return;
+                settled = true;
+                const next = ta.value.trim();
+                // An empty title would leave a row with nothing to identify it by,
+                // and the panel has no undo. Treat it as a cancel.
+                const wipesTitle = field === "title" && !next;
+                const changed = commit && next !== original && !wipesTitle;
+
+                ta.remove();
+                el.style.display = "";
+                setEditableText(el, changed ? next : original, o);
+                if (changed) {
+                    // Keep the local payload in step so a render parked by this
+                    // edit does not repaint the pre-edit value on the way out.
+                    applyLocalField(todo.id, field, next);
+                    // The expand panel snapshots its inputs when it is built, so
+                    // an open panel still holds the pre-edit value — its Save
+                    // button would post that stale value straight back.
+                    syncExpandPanelField(el, field, next);
+                    vscode.postMessage({
+                        type: "updateTodo",
+                        id: todo.id,
+                        fields: { [field]: next },
+                    });
+                    // The host answers every write with a full payload, so name
+                    // where focus belongs once that rebuild lands.
+                    lastEditFocus = { id: todo.id, field: field };
+                }
+                releaseDeferredRender();
+                if (refocus) el.focus();
+                if (changed) requestAnimationFrame(() => flashSaved(todo.id));
+            };
+
+            ta.addEventListener("input", () => autoGrow(ta));
+            ta.addEventListener("keydown", (ev) => {
+                if (ev.key === "Escape") {
+                    // Load-bearing: the global Escape handler runs ahead of its
+                    // own text-input guard and would close the task page instead.
+                    ev.stopPropagation();
+                    finish(false, true);
+                    return;
+                }
+                if (ev.key === "Enter" && (o.enterCommits !== false || ev.metaKey || ev.ctrlKey)) {
+                    ev.preventDefault();
+                    finish(true, true);
+                }
+            });
+            // Tabbing out already moved focus somewhere deliberate; pulling it
+            // back to the read-state div would make the Tab look like a no-op.
+            ta.addEventListener("blur", (ev) => finish(true, !ev.relatedTarget));
+        }
+
+        // `:scope >` matters: the panel is a direct child of its own card, and a
+        // root card's subtree also contains its children's panels.
+        function syncExpandPanelField(el, field, value) {
+            const card = el.closest(".task-card");
+            const ctl = card && card.querySelector(
+                ':scope > .task-expand-panel [data-field="' + field + '"]'
+            );
+            if (ctl) ctl.value = value;
+        }
+
+        function buildTaskCard(todo, childrenByParent, depth = 0, parentRepoKey = null) {
             const rk = repoKey(todo.repo);
+            // Density tier, capped: sub-tasks read smaller than their parent, but a
+            // deep nest stops shrinking rather than becoming unreadable.
+            const tier = Math.min(depth, MAX_DEPTH_TIER);
             const card = document.createElement("article");
             card.className = "task-card" + (todo.done ? " done" : "") + (rk ? " repo-" + rk : "");
             if (todo.pinned) card.classList.add("pinned");
             if (expandedId === todo.id) card.classList.add("expanded");
             card.dataset.id = todo.id;
+            card.dataset.depth = String(tier);
             card.dataset.group = groupMode === "repo" ? (rk || "unknown") : groupMode === "status" ? statusToneForTodo(todo) : "list";
-            card.style.setProperty("--card-accent", cardAccentFor(todo));
             card.tabIndex = kbdFocusId === todo.id ? 0 : -1;
 
             const head = document.createElement("div");
@@ -3025,6 +3628,10 @@
 
             const badge = document.createElement("div");
             badge.className = "repo-badge" + (rk ? " repo-" + rk : " repo-unknown");
+            // A sub-task almost always sits in its parent's repo. Repeating the
+            // badge down the nest only costs the title horizontal room, so it is
+            // dropped unless the child actually lives somewhere else.
+            if (depth > 0 && rk === parentRepoKey) badge.classList.add("is-redundant");
             if (REPO_VIS[rk]) {
                 badge.textContent = REPO_VIS[rk].icon;
                 badge.title = REPO_VIS[rk].name;
@@ -3036,23 +3643,25 @@
                 badge.title = "No repo";
             }
 
-            const pinBtn = document.createElement("button");
-            pinBtn.type = "button";
-            pinBtn.className = "card-pin-btn" + (todo.pinned ? " is-pinned" : "");
-            pinBtn.textContent = "📌";
-            pinBtn.title = todo.pinned ? "Unpin (move to Open)" : "Pin to top";
-            pinBtn.setAttribute(
+            const pinBtn = makeCardPinButton(todo);
+
+            // The title is an input now, so it can no longer double as the
+            // expand target — this is the explicit disclosure control.
+            const isExpanded = expandedId === todo.id;
+            const expandBtn = document.createElement("button");
+            expandBtn.type = "button";
+            expandBtn.className = "card-expand-btn";
+            expandBtn.textContent = "⌄";
+            expandBtn.title = isExpanded ? "Hide details" : "Show all fields";
+            expandBtn.setAttribute(
                 "aria-label",
-                todo.pinned ? "Unpin task" : "Pin task to top"
+                (isExpanded ? "Hide details for " : "Show details for ")
+                + (todo.title || todo.label || "task")
             );
-            pinBtn.setAttribute("aria-pressed", todo.pinned ? "true" : "false");
-            pinBtn.addEventListener("click", (ev) => {
+            expandBtn.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+            expandBtn.addEventListener("click", (ev) => {
                 ev.stopPropagation();
-                vscode.postMessage({
-                    type: "setPinned",
-                    id: todo.id,
-                    pinned: !todo.pinned,
-                });
+                toggleExpanded(todo.id);
             });
 
             const body = document.createElement("div");
@@ -3068,10 +3677,14 @@
                 titleRow.appendChild(urg);
             }
 
-            const titleEl = document.createElement("div");
-            titleEl.className = "todo-title";
-            titleEl.textContent = todo.title || todo.label || "Untitled";
-            titleEl.title = (todo.status ? todo.status + " — " : "") + "Click to expand details";
+            const titleEl = editableText(todo, "title", todo.title || todo.label || "", {
+                className: "todo-title",
+                placeholder: "Untitled",
+                emptyLabel: "Untitled",
+                label: "task title",
+            });
+            titleEl.title = (todo.status ? todo.status + " — " : "")
+                + "Click to rename · Enter saves, Escape cancels";
             titleRow.appendChild(titleEl);
 
             if (taskAppliesToWorkspaceContext(todo)) {
@@ -3090,11 +3703,30 @@
 
             body.appendChild(titleRow);
 
-            if (todo.next_action && !todo.done) {
-                const na = document.createElement("div");
-                na.className = "todo-next-action";
-                na.textContent = todo.next_action;
-                body.appendChild(na);
+            // Root cards always offer both fields, empty or not: gating on a value
+            // meant clearing one removed the only place to type it back. Nested
+            // cards still only show a next action they actually have.
+            if (!todo.done && (todo.next_action || tier === 0)) {
+                body.appendChild(editableText(todo, "next_action", todo.next_action, {
+                    className: "todo-next-action",
+                    placeholder: "Next action",
+                    emptyLabel: "Add a next action",
+                    label: "next action",
+                    hint: "Click to edit · Enter saves, Escape cancels",
+                }));
+            }
+
+            // Notes are the card's body copy. Only root cards carry it: nested
+            // sub-tasks stay a title-and-chips row so the hierarchy reads.
+            if (tier === 0 && !todo.done) {
+                body.appendChild(editableText(todo, "notes", todo.notes, {
+                    className: "todo-body",
+                    placeholder: "Notes",
+                    emptyLabel: "Add notes",
+                    label: "notes",
+                    enterCommits: false,
+                    hint: "Click to edit · ⌘Enter saves, Escape cancels",
+                }));
             }
 
             const secondary = document.createElement("div");
@@ -3123,9 +3755,16 @@
             if (meta) body.appendChild(meta);
 
             head.appendChild(handle);
-            head.appendChild(checkWrap);
+            const lead = document.createElement("div");
+            lead.className = "card-lead";
+            lead.appendChild(checkWrap);
+            lead.appendChild(expandBtn);
+            head.appendChild(lead);
             head.appendChild(badge);
             head.appendChild(pinBtn);
+            if (!todo.done && depth < 2) {
+                head.appendChild(makeCardDoneButton(todo));
+            }
             head.appendChild(body);
             card.appendChild(head);
 
@@ -3136,17 +3775,38 @@
             if (childrenByParent) {
                 const kids = childrenByParent.get(todo.id);
                 if (kids && kids.length) {
-                    const nest = document.createElement("div");
-                    nest.className = "task-nest";
-                    kids.forEach((child) => {
-                        nest.appendChild(buildTaskCard(child, childrenByParent));
+                    const nestToggle = document.createElement("button");
+                    nestToggle.type = "button";
+                    nestToggle.className = "nest-toggle";
+                    const collapsed = isNestCollapsed(todo.id);
+                    nestToggle.textContent = "▾";
+                    nestToggle.title = collapsed
+                        ? "Show " + kids.length + " nested"
+                        : "Hide nested";
+                    nestToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+                    nestToggle.setAttribute(
+                        "aria-label",
+                        (collapsed ? "Expand" : "Collapse") +
+                            " " + kids.length + " nested tasks"
+                    );
+                    nestToggle.addEventListener("click", (ev) => {
+                        ev.stopPropagation();
+                        toggleNestCollapsed(todo.id);
                     });
-                    card.appendChild(nest);
+                    lead.appendChild(nestToggle);
+                    if (!collapsed) {
+                        const nest = document.createElement("div");
+                        nest.className = "task-nest";
+                        kids.forEach((child) => {
+                            nest.appendChild(buildTaskCard(child, childrenByParent, depth + 1, rk));
+                        });
+                        card.appendChild(nest);
+                    }
                 }
             }
 
             card.addEventListener("click", (ev) => {
-                if (ev.target.closest("a, button, input, textarea, select, label.check, .drag-handle, .task-expand-panel, .card-pin-btn")) {
+                if (ev.target.closest("a, button, input, textarea, select, label.check, .drag-handle, .task-expand-panel, .card-pin-btn, .card-done-btn, .nest-toggle")) {
                     return;
                 }
                 toggleExpanded(todo.id);
@@ -3158,7 +3818,14 @@
         }
 
         function visibleTaskCards() {
-            return [...document.querySelectorAll("#sectionsRoot .task-card")];
+            return [...document.querySelectorAll("#sectionsRoot .task-card, #sectionsRoot .board-card")];
+        }
+
+        function cardElementById(id) {
+            const esc = CSS.escape(id);
+            return document.querySelector(
+                '.task-card[data-id="' + esc + '"], .board-card[data-id="' + esc + '"]'
+            );
         }
 
         function setKbdFocus(id) {
@@ -3166,13 +3833,11 @@
                 return;
             }
             kbdFocusId = id;
-            document.querySelectorAll(".task-card.kbd-focus").forEach((el) => {
+            document.querySelectorAll(".kbd-focus").forEach((el) => {
                 el.classList.remove("kbd-focus");
             });
             if (!id) return;
-            const card = document.querySelector(
-                '.task-card[data-id="' + CSS.escape(id) + '"]'
-            );
+            const card = cardElementById(id);
             if (card) {
                 card.classList.add("kbd-focus");
             }
@@ -3187,6 +3852,62 @@
             if (!todo || todo.done) return;
             showDoneModal(todo);
         }
+
+        function isNestCollapsed(parentId) {
+            return collapsedNestIds.has(parentId);
+        }
+
+        function toggleNestCollapsed(parentId) {
+            if (collapsedNestIds.has(parentId)) {
+                collapsedNestIds.delete(parentId);
+            } else {
+                collapsedNestIds.add(parentId);
+            }
+            saveUiState();
+            scheduleRender();
+        }
+
+        function makeCardDoneButton(todo, className) {
+            const doneBtn = document.createElement("button");
+            doneBtn.type = "button";
+            doneBtn.className = className || "card-done-btn";
+            doneBtn.textContent = "✓";
+            doneBtn.title = "Mark done";
+            doneBtn.setAttribute(
+                "aria-label",
+                "Mark done: " + (todo.title || todo.label || "task")
+            );
+            doneBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                showDoneModal(todo);
+            });
+            return doneBtn;
+        }
+
+        function makeCardPinButton(todo, className) {
+            const pinBtn = document.createElement("button");
+            pinBtn.type = "button";
+            pinBtn.className = "card-pin-btn" +
+                (className ? " " + className : "") +
+                (todo.pinned ? " is-pinned" : "");
+            pinBtn.textContent = "📌";
+            pinBtn.title = todo.pinned ? "Unpin (move to Open)" : "Pin to top";
+            pinBtn.setAttribute(
+                "aria-label",
+                todo.pinned ? "Unpin task" : "Pin task to top"
+            );
+            pinBtn.setAttribute("aria-pressed", todo.pinned ? "true" : "false");
+            pinBtn.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                vscode.postMessage({
+                    type: "setPinned",
+                    id: todo.id,
+                    pinned: !todo.pinned,
+                });
+            });
+            return pinBtn;
+        }
+
 
         function indexChildrenByParent(todos) {
             const map = new Map();
@@ -3259,17 +3980,23 @@
                 return undefined;
             }
             if (groupMode === "status") {
-                const bucket = STATUS_BUCKETS.find((b) => b.tone === groupKey);
-                const tone = groupKey;
-                return {
-                    status: bucket ? bucket.label : "Other",
-                    status_key: tone === "default" ? "other" : tone,
-                };
+                return statusGroupSync(groupKey);
             }
             return undefined;
         }
 
-        function groupSyncForTargetCard(targetTodo, cardGroupKey) {
+        function statusGroupSync(tone) {
+            // Archive tones are terminal — never emit them as open status_keys.
+            if (!tone || isDoneTone(tone)) return undefined;
+            const bucket = STATUS_BUCKETS.find((b) => b.tone === tone);
+            return {
+                status: bucket ? bucket.label : "Backlog",
+                status_key: statusKeyForTone(tone),
+            };
+        }
+
+        function groupSyncForTargetCard(targetTodo, cardGroupKey, forceStatus) {
+            if (forceStatus) return statusGroupSync(cardGroupKey);
             return groupSyncForSectionKey(cardGroupKey);
         }
 
@@ -3379,11 +4106,14 @@
         }
 
         function clearIndicators() {
-            document.querySelectorAll(".task-card.drop-before, .task-card.drop-after, .task-card.drop-nest")
+            document.querySelectorAll(
+                ".task-card.drop-before, .task-card.drop-after, .task-card.drop-nest, " +
+                ".board-card.drop-before, .board-card.drop-after, .board-card.drop-nest"
+            )
                 .forEach((el) => el.classList.remove("drop-before", "drop-after", "drop-nest"));
         }
 
-        function applyNest(childId, parentId, parentCardGroup) {
+        function applyNest(childId, parentId, parentCardGroup, forceStatus) {
             const todos = boot.activeTasks.todos || [];
             const parentMap = parentMapFromTodos(todos);
             if (isUnderAncestor(parentId, childId, parentMap)) return;
@@ -3391,7 +4121,7 @@
             const child = byId.get(childId);
             const parent = byId.get(parentId);
             if (!child || !parent) return;
-            const sync = groupSyncForTargetCard(parent, parentCardGroup);
+            const sync = groupSyncForTargetCard(parent, parentCardGroup, forceStatus);
             child.parent_id = parentId;
             applyGroupSyncToTodo(child, sync);
             parentMap.set(childId, parentId);
@@ -3431,10 +4161,6 @@
             scheduleRender();
         }
 
-        function applyReorder(dragId, targetId, after) {
-            applyMoveSibling(dragId, targetId, after);
-        }
-
         function sectionHead(title, count, dotColor) {
             const head = document.createElement("div");
             head.className = "section-head";
@@ -3463,11 +4189,18 @@
             wrap.appendChild(sectionHead(title, todos.length, dotColor));
             const list = document.createElement("div");
             list.className = "task-cards";
-            const childrenByParent = indexChildrenByParent(todos);
-            const roots = rootTodosInSection(todos);
-            const order = new Map(todos.map((t, i) => [t.id, i]));
-            roots.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-            roots.forEach((t) => list.appendChild(buildTaskCard(t, childrenByParent)));
+            if (hideNested) {
+                const roots = rootTodosInSection(todos);
+                const order = new Map(todos.map((t, i) => [t.id, i]));
+                roots.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+                roots.forEach((t) => list.appendChild(buildTaskCard(t, null)));
+            } else {
+                const childrenByParent = indexChildrenByParent(todos);
+                const roots = rootTodosInSection(todos);
+                const order = new Map(todos.map((t, i) => [t.id, i]));
+                roots.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+                roots.forEach((t) => list.appendChild(buildTaskCard(t, childrenByParent)));
+            }
             wrap.appendChild(list);
             wireSectionDrop(wrap, sectionGroupKey);
             return wrap;
@@ -3490,399 +4223,309 @@
             STATUS_BUCKETS.forEach((bucket) => {
                 const items = todos.filter((t) => statusToneForTodo(t) === bucket.tone);
                 if (items.length) {
-                    const dot = {
-                        blocked: "var(--status-blocked-fg)",
-                        review: "var(--status-review-fg)",
-                        progress: "var(--status-progress-fg)",
-                        ready: "var(--status-ready-fg)",
-                        paused: "var(--muted)",
-                        default: "var(--accent)",
-                    }[bucket.tone];
-                    root.appendChild(listSection(bucket.label, items, dot, bucket.tone));
+                    root.appendChild(
+                        listSection(bucket.label, items, STATUS_TONE_DOT[bucket.tone], bucket.tone)
+                    );
                 }
             });
         }
 
-        function renderReconcileDock() {
-            const dock = document.getElementById("reconcileDock");
-            if (!dock) {
-                return;
+        const BOARD_COL_DOT = STATUS_TONE_DOT;
+
+        function statusKeyForTone(tone) {
+            if (isDoneTone(tone)) {
+                return "backlog";
             }
-            dock.replaceChildren();
-            renderDiscovery(dock);
+            if (tone === "default" || tone === "ready" || tone === "paused" || tone === "other") {
+                return "backlog";
+            }
+            return tone;
         }
 
-        function renderReconcileToolbar(parent, disc) {
-            const feed = disc.reconcileFeed || {};
-            const bar = document.createElement("div");
-            bar.className = "reconcile-toolbar";
-            bar.setAttribute("role", "toolbar");
-            bar.setAttribute("aria-label", "Reconcile actions");
+        function buildBoardCard(todo, childrenByParent, depth) {
+            const tier = Math.min(depth || 0, 2);
+            const card = document.createElement("article");
+            card.className = "board-card";
+            if (expandedId === todo.id) card.classList.add("is-expanded");
+            if (kbdFocusId === todo.id) card.classList.add("kbd-focus");
+            card.dataset.id = todo.id;
+            card.dataset.depth = String(tier);
+            card.dataset.group = statusToneForTodo(todo);
+            card.draggable = true;
+            card.tabIndex = kbdFocusId === todo.id ? 0 : -1;
 
-            const refreshBtn = document.createElement("button");
-            refreshBtn.type = "button";
-            refreshBtn.id = "reconcileRefreshBtn";
-            refreshBtn.className = "primary";
-            refreshBtn.textContent = "Refresh";
-            refreshBtn.title = "Reload tasks and run GitHub + cloud reconcile scan";
-            refreshBtn.addEventListener("click", () => requestRefresh());
-            bar.appendChild(refreshBtn);
-
-            const baselineBtn = document.createElement("button");
-            baselineBtn.type = "button";
-            baselineBtn.textContent = "Reset feed baseline";
-            baselineBtn.title = "Ignore older PRs/agents until they update (incremental mode)";
-            baselineBtn.addEventListener("click", () => {
-                setRefreshSpinning(true);
-                vscode.postMessage({ type: "reconcileResetBaseline" });
+            const title = document.createElement("div");
+            title.className = "board-card-title";
+            const urg = document.createElement("span");
+            urg.className = "urgency-dot " + urgencyClassForTodo(todo);
+            urg.title = "Priority / status signal";
+            title.appendChild(urg);
+            const titleText = editableText(todo, "title", todo.title || todo.label || "", {
+                className: "board-card-title-text",
+                placeholder: "Untitled",
+                emptyLabel: "Untitled",
+                label: "task title",
             });
-            bar.appendChild(baselineBtn);
+            title.appendChild(titleText);
+            card.appendChild(title);
 
-            const incrBtn = document.createElement("button");
-            incrBtn.type = "button";
-            incrBtn.classList.toggle("active", feed.backfill === false);
-            incrBtn.textContent = "Incremental";
-            incrBtn.title = "Only new/updated items after baseline";
-            incrBtn.addEventListener("click", () => {
-                if (feed.backfill === false) {
-                    return;
+            card.appendChild(editableText(todo, "next_action", todo.next_action, {
+                className: "board-card-next",
+                placeholder: "Next action",
+                emptyLabel: "Add a next action",
+                label: "next action",
+            }));
+
+            const foot = document.createElement("div");
+            foot.className = "board-card-foot";
+            const p = typeof todo.priority === "number" ? todo.priority : 1;
+            const prio = document.createElement("span");
+            prio.className = "board-prio p" + p;
+            prio.textContent = "P" + p;
+            prio.title = "Priority " + p + " (0 = highest)";
+            foot.appendChild(prio);
+            if (todo.pinned) {
+                const pin = document.createElement("span");
+                pin.className = "pin-indicator";
+                pin.textContent = "📌";
+                pin.title = "Pinned";
+                foot.appendChild(pin);
+            }
+            const rk = repoKey(todo.repo);
+            if (REPO_VIS[rk]) {
+                const repoChip = chip("repo repo-" + rk, REPO_VIS[rk].short);
+                repoChip.title = REPO_VIS[rk].name;
+                foot.appendChild(repoChip);
+            }
+            const prChip = primaryPrLinkChip(todo);
+            if (prChip) foot.appendChild(prChip);
+            const ciDot = ciDotForTodo(todo);
+            if (ciDot) foot.appendChild(ciDot);
+            foot.appendChild(makeCardPinButton(todo, "board-card-pin-btn"));
+            foot.appendChild(makeCardDoneButton(todo, "board-card-done-btn"));
+            card.appendChild(foot);
+
+            wireBoardCardDrag(card);
+            card.addEventListener("click", (ev) => {
+                if (ev.target.closest("a, button, input, textarea, select, .editable")) return;
+                setKbdFocus(todo.id);
+                toggleExpanded(todo.id);
+            });
+            card.addEventListener("keydown", (ev) => {
+                if (ev.key === "Enter") {
+                    ev.preventDefault();
+                    toggleExpanded(todo.id);
                 }
-                vscode.postMessage({ type: "reconcileSetBackfill", enabled: false });
             });
-            bar.appendChild(incrBtn);
 
-            const backfillBtn = document.createElement("button");
-            backfillBtn.type = "button";
-            backfillBtn.classList.toggle("active", feed.backfill === true);
-            backfillBtn.textContent = "Full backfill";
-            backfillBtn.title = "Show all untracked open PRs and agents";
-            backfillBtn.addEventListener("click", () => {
-                if (feed.backfill === true) {
-                    return;
-                }
-                vscode.postMessage({ type: "reconcileSetBackfill", enabled: true });
-            });
-            bar.appendChild(backfillBtn);
-
-            const reviewBtn = document.createElement("button");
-            reviewBtn.type = "button";
-            reviewBtn.classList.toggle("active", feed.includeReviewRequested !== false);
-            reviewBtn.textContent = "Review PRs";
-            reviewBtn.title = "Include review-requested PRs in GitHub feed";
-            reviewBtn.addEventListener("click", () => {
-                const next = feed.includeReviewRequested === false;
-                vscode.postMessage({ type: "reconcileSetIncludeReview", enabled: next });
-            });
-            bar.appendChild(reviewBtn);
-
-            const agentHint = disc.agentConsolidation || {};
-            if (agentHint.overRecommended) {
-                const agentBtn = document.createElement("button");
-                agentBtn.type = "button";
-                agentBtn.className = "ghost";
-                agentBtn.textContent = "Consolidate brief";
-                agentBtn.addEventListener("click", () => {
-                    vscode.postMessage({ type: "copyAgentConsolidationBrief" });
-                });
-                bar.appendChild(agentBtn);
-            }
-
-            parent.appendChild(bar);
-        }
-
-        function renderDiscovery(root) {
-            const disc = boot.discovery || {};
-            const missing = disc.missingPrs || [];
-            const stale = disc.staleTrackedPrs || [];
-            const cloud = disc.cloudAgents || [];
-            const untrackedCloud = new Set((disc.untrackedCloudAgents || []).map((a) => a.agentId));
-            const reconcileCount = missing.length + untrackedCloud.size + stale.length;
-            const structural = disc.structuralMergeCandidates || [];
-            const agentHint = disc.agentConsolidation || {};
-            const needsAgentConsolidate = Boolean(agentHint.overRecommended);
-            const hasScan = Boolean(disc.scannedAt);
-            if (
-                !hasScan &&
-                !reconcileCount &&
-                !structural.length &&
-                !needsAgentConsolidate &&
-                !cloud.length &&
-                !disc.githubError &&
-                !disc.cloudError
-            ) {
-                renderReconcileToolbar(root, disc);
-                const idle = document.createElement("p");
-                idle.className = "disc-hint";
-                idle.textContent = "No scan yet — use Refresh scan to load GitHub and cloud feeds.";
-                root.appendChild(idle);
-                return;
-            }
-
-            const wrap = document.createElement("section");
-            wrap.className = "section";
-
-            renderReconcileToolbar(wrap, disc);
-
-            const details = document.createElement("details");
-            details.className = "reconcile-details";
-            details.open =
-                pillFilter === "needsReconcile" ||
-                reconcileCount > 0 ||
-                structural.length > 0 ||
-                needsAgentConsolidate;
-
-            const summary = document.createElement("summary");
-            const summaryParts = ["Reconcile"];
-            if (missing.length) summaryParts.push(missing.length + " inbound");
-            if (stale.length) summaryParts.push(stale.length + " stale");
-            const agentCount = untrackedCloud.size;
-            if (agentCount) summaryParts.push(agentCount + " agent");
-            if (structural.length) summaryParts.push(structural.length + " duplicate");
-            if (needsAgentConsolidate) summaryParts.push("consolidate (agent)");
-            if (summaryParts.length === 1 && disc.scannedAt) {
-                summaryParts.push("up to date");
-            }
-            summary.textContent = summaryParts.join(" · ");
-            details.appendChild(summary);
-
-            const hint = document.createElement("p");
-            hint.className = "disc-hint";
-            const parts = [];
-            if (reconcileCount === 0 && disc.scannedAt) {
-                const rel = relativeScanAge(disc.scannedAt);
-                hint.textContent = "✓ All PRs and cloud agents tracked · scanned " + rel;
-                if (scanIsStale(disc.scannedAt)) {
-                    hint.classList.add("stale-scan");
-                }
-            } else if (disc.scannedAt) {
-                parts.push("Scanned " + shortAt(disc.scannedAt));
-            }
-            if (disc.githubError) parts.push("GitHub: " + disc.githubError);
-            if (disc.cloudError) parts.push("Cloud: " + disc.cloudError);
-            const feed = disc.reconcileFeed || {};
-            if (feed.backfill === false) {
-                parts.push(
-                    "Incremental feed" +
-                        (feed.watermarkAt
-                            ? " since " + shortAt(feed.watermarkAt)
-                            : "")
-                );
-            }
-            if (!hint.textContent) {
-                hint.textContent = parts.length
-                    ? parts.join(" · ")
-                    : "Inbound (untracked) and outbound (stale) vs your active work list.";
-            }
-            details.appendChild(hint);
-
-            const cards = document.createElement("div");
-            cards.className = "disc-cards";
-
-            if (needsAgentConsolidate || (agentHint.openCount && agentHint.openCount > 6)) {
-                const card = document.createElement("article");
-                card.className = "disc-card";
-                const title = document.createElement("p");
-                title.className = "disc-title";
-                title.textContent =
-                    "Consolidate with Agent · " +
-                    (agentHint.openCount || "?") +
-                    " open rows (target 3–8)";
-                card.appendChild(title);
-                const sub = document.createElement("p");
-                sub.className = "disc-hint";
-                sub.textContent =
-                    "Grouping related initiatives is semantic — use Agent to merge rows, not automatic title matching.";
-                card.appendChild(sub);
-                const actions = document.createElement("div");
-                actions.className = "disc-actions";
-                actions.appendChild(
-                    discActionBtn("Copy brief for Agent", () => {
-                        vscode.postMessage({ type: "copyAgentConsolidationBrief" });
-                    })
-                );
-                card.appendChild(actions);
-                cards.appendChild(card);
-            }
-
-            structural.slice(0, RECONCILE_CARD_CAP).forEach((sug) => {
-                const card = document.createElement("article");
-                card.className = "disc-card untracked";
-                const title = document.createElement("p");
-                title.className = "disc-title";
-                title.textContent =
-                    "Nest " +
-                    (1 + sug.mergeIds.length) +
-                    " rows · " +
-                    (sug.reason || "Related work");
-                card.appendChild(title);
-                const list = document.createElement("ul");
-                list.className = "disc-hint";
-                list.style.margin = "0.35rem 0 0";
-                list.style.paddingLeft = "1.1rem";
-                (sug.titles || []).forEach((t) => {
-                    const li = document.createElement("li");
-                    li.textContent = t;
-                    list.appendChild(li);
-                });
-                card.appendChild(list);
-                const actions = document.createElement("div");
-                actions.className = "disc-actions";
-                actions.appendChild(
-                    discActionBtn("Nest as subtasks", () => {
-                        vscode.postMessage({
-                            type: "mergeWorkRows",
-                            primaryId: sug.primaryId,
-                            mergeIds: sug.mergeIds,
+            if (childrenByParent) {
+                const kids = childrenByParent.get(todo.id);
+                if (kids && kids.length) {
+                    const nestToggle = document.createElement("button");
+                    nestToggle.type = "button";
+                    nestToggle.className = "nest-toggle";
+                    const collapsed = isNestCollapsed(todo.id);
+                    nestToggle.textContent = "▾";
+                    nestToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+                    nestToggle.title = collapsed
+                        ? "Show " + kids.length + " nested"
+                        : "Hide nested";
+                    nestToggle.addEventListener("click", (ev) => {
+                        ev.stopPropagation();
+                        toggleNestCollapsed(todo.id);
+                    });
+                    foot.appendChild(nestToggle);
+                    if (!collapsed) {
+                        const nest = document.createElement("div");
+                        nest.className = "board-nest";
+                        kids.forEach((child) => {
+                            nest.appendChild(buildBoardCard(child, childrenByParent, tier + 1));
                         });
-                    })
+                        card.appendChild(nest);
+                    }
+                }
+            }
+            return card;
+        }
+
+        function wireBoardCardDrag(card) {
+            card.addEventListener("dragstart", (ev) => {
+                draggedId = card.dataset.id;
+                card.classList.add("dragging");
+                ev.dataTransfer.effectAllowed = "move";
+                try { ev.dataTransfer.setData("text/plain", draggedId); } catch (e) { /* noop */ }
+            });
+            card.addEventListener("dragend", () => {
+                draggedId = null;
+                card.classList.remove("dragging");
+                clearBoardDropTargets();
+                clearIndicators();
+            });
+            card.addEventListener("dragover", (ev) => {
+                if (!draggedId || card.dataset.id === draggedId) return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                ev.dataTransfer.dropEffect = "move";
+                const zone = dragDropZone(card, ev.clientY);
+                clearIndicators();
+                card.classList.add(
+                    zone === "nest" ? "drop-nest" : zone === "after" ? "drop-after" : "drop-before"
                 );
-                card.appendChild(actions);
-                cards.appendChild(card);
             });
-
-            stale.slice(0, RECONCILE_CARD_CAP).forEach((row) => {
-                const card = document.createElement("article");
-                card.className = "disc-card untracked";
-                const title = document.createElement("p");
-                title.className = "disc-title";
-                title.textContent = "Stale: " + row.title + " · PR #" + row.prNumber;
-                card.appendChild(title);
-                const meta = document.createElement("div");
-                meta.className = "disc-meta";
-                const st = document.createElement("span");
-                st.className = "disc-pill";
-                st.textContent = row.state || "not open";
-                meta.appendChild(st);
-                card.appendChild(meta);
-                const actions = document.createElement("div");
-                actions.className = "disc-actions";
-                actions.appendChild(discActionBtn("Remove row", () => {
-                    vscode.postMessage({ type: "reconcileRemoveRow", id: row.todoId });
-                }));
-                actions.appendChild(discActionBtn("Open PR", () => openExternalUrl(row.prUrl)));
-                card.appendChild(actions);
-                cards.appendChild(card);
+            card.addEventListener("dragleave", (ev) => {
+                if (ev.relatedTarget && card.contains(ev.relatedTarget)) return;
+                card.classList.remove("drop-before", "drop-after", "drop-nest");
             });
-
-            missing.slice(0, RECONCILE_CARD_CAP).forEach((pr) => {
-                const card = document.createElement("article");
-                card.className = "disc-card untracked";
-                const title = document.createElement("p");
-                title.className = "disc-title";
-                const a = document.createElement("a");
-                a.href = "#";
-                a.textContent = "PR #" + pr.number + " " + (pr.title || "");
-                a.addEventListener("click", (ev) => {
-                    ev.preventDefault();
-                    openExternalUrl(pr.url);
-                });
-                title.appendChild(a);
-                card.appendChild(title);
-                const meta = document.createElement("div");
-                meta.className = "disc-meta";
-                if (pr.repoKey && REPO_VIS[pr.repoKey]) {
-                    const pill = document.createElement("span");
-                    pill.className = "disc-pill";
-                    pill.textContent = REPO_VIS[pr.repoKey].short;
-                    meta.appendChild(pill);
+            card.addEventListener("drop", (ev) => {
+                if (!draggedId || card.dataset.id === draggedId) return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                const zone = dragDropZone(card, ev.clientY);
+                if (zone === "nest") {
+                    applyNest(draggedId, card.dataset.id, card.dataset.group, true);
+                } else {
+                    applyMoveSibling(
+                        draggedId,
+                        card.dataset.id,
+                        zone === "after",
+                        statusGroupSync(card.dataset.group)
+                    );
                 }
-                const rel = document.createElement("span");
-                rel.className = "disc-pill";
-                rel.textContent = pr.relation === "review_requested" ? "Review requested" : "Authored";
-                meta.appendChild(rel);
-                if (pr.isDraft) {
-                    const d = document.createElement("span");
-                    d.className = "disc-pill";
-                    d.textContent = "Draft";
-                    meta.appendChild(d);
-                }
-                const tag = document.createElement("span");
-                tag.className = "disc-pill";
-                tag.textContent = "Not tracked yet";
-                meta.appendChild(tag);
-                card.appendChild(meta);
-                attachSelectForPr(pr, card);
-                cards.appendChild(card);
+                clearIndicators();
             });
+        }
 
-            const cloudVisible = [];
-            cloud.forEach((agent) => {
-                const untracked = untrackedCloud.has(agent.agentId);
-                if (!untracked && agent.runStatus !== "running") {
-                    return;
-                }
-                cloudVisible.push({ agent, untracked });
+        function clearBoardDropTargets() {
+            document.querySelectorAll(".board-col.drop-target")
+                .forEach((el) => el.classList.remove("drop-target"));
+        }
+
+        function wireBoardColumnDrop(col, tone) {
+            col.addEventListener("dragover", (ev) => {
+                if (!draggedId) return;
+                ev.preventDefault();
+                ev.dataTransfer.dropEffect = "move";
+                col.classList.add("drop-target");
             });
-
-            cloudVisible.slice(0, RECONCILE_CARD_CAP).forEach(({ agent, untracked }) => {
-                const card = document.createElement("article");
-                card.className = "disc-card" + (untracked ? " untracked" : "");
-                const title = document.createElement("p");
-                title.className = "disc-title";
-                const a = document.createElement("a");
-                a.href = "#";
-                a.textContent = "☁ " + (agent.name || agent.agentId);
-                a.addEventListener("click", (ev) => {
-                    ev.preventDefault();
-                    openExternalUrl(agent.url);
-                });
-                title.appendChild(a);
-                card.appendChild(title);
-                const meta = document.createElement("div");
-                meta.className = "disc-meta";
-                if (agent.runStatus === "running") {
-                    const run = document.createElement("span");
-                    run.className = "disc-pill running";
-                    run.textContent = "Running";
-                    meta.appendChild(run);
-                } else if (agent.runStatus) {
-                    const st = document.createElement("span");
-                    st.className = "disc-pill";
-                    st.textContent = agent.runStatus;
-                    meta.appendChild(st);
-                }
-                if (agent.branch) {
-                    const br = document.createElement("span");
-                    br.className = "disc-pill";
-                    br.textContent = agent.branch;
-                    meta.appendChild(br);
-                }
-                if (untracked) {
-                    const tag = document.createElement("span");
-                    tag.className = "disc-pill";
-                    tag.textContent = "Not tracked yet";
-                    meta.appendChild(tag);
-                }
-                card.appendChild(meta);
-                if (untracked) {
-                    const actions = document.createElement("div");
-                    actions.className = "disc-actions";
-                    actions.appendChild(discActionBtn("Dismiss", () => {
-                        vscode.postMessage({ type: "reconcileDismiss", kind: "cloud", refKey: agent.agentId });
-                    }));
-                    card.appendChild(actions);
-                }
-                cards.appendChild(card);
+            col.addEventListener("dragleave", (ev) => {
+                if (ev.relatedTarget && col.contains(ev.relatedTarget)) return;
+                col.classList.remove("drop-target");
             });
+            col.addEventListener("drop", (ev) => {
+                if (!draggedId) return;
+                ev.preventDefault();
+                clearBoardDropTargets();
+                applyBoardDrop(draggedId, tone);
+            });
+        }
 
-            const hiddenReconcile =
-                Math.max(0, stale.length - RECONCILE_CARD_CAP) +
-                Math.max(0, missing.length - RECONCILE_CARD_CAP) +
-                Math.max(0, cloudVisible.length - RECONCILE_CARD_CAP) +
-                Math.max(0, structural.length - RECONCILE_CARD_CAP);
-            if (hiddenReconcile > 0) {
-                const more = document.createElement("p");
-                more.className = "disc-hint";
-                more.textContent =
-                    "+" + hiddenReconcile + " more items — refresh scan or open GitHub to review.";
-                cards.appendChild(more);
+        // Reuses the status-grouping move message, so the board needs no host
+        // handler of its own. Archive columns finish the row instead.
+        function applyBoardDrop(dragId, tone) {
+            const drag = (boot.activeTasks.todos || []).find((t) => t.id === dragId);
+            if (!drag) return;
+            if (isDoneTone(tone)) {
+                markTodoDone(dragId, tone === "wont_fix" ? "wont_fix" : "manual");
+                return;
             }
+            if (statusToneForTodo(drag) === tone) return;
+            const bucket = STATUS_BUCKETS.find((b) => b.tone === tone);
+            const sync = {
+                status: bucket ? bucket.label : "Backlog",
+                status_key: statusKeyForTone(tone),
+            };
+            applyGroupSyncToTodo(drag, sync);
+            vscode.postMessage({ type: "moveTaskToSection", childId: dragId, groupSync: sync });
+            scheduleRender();
+        }
 
-            if (cards.childElementCount) {
-                details.appendChild(cards);
+        function buildBoardColumn(bucket, items, childrenByParent) {
+            const col = document.createElement("section");
+            col.className = "board-col";
+            if (isDoneTone(bucket.tone)) col.classList.add("board-col-done");
+            col.dataset.tone = bucket.tone;
+
+            const head = document.createElement("div");
+            head.className = "board-col-head";
+            const dot = document.createElement("span");
+            dot.className = "bc-dot";
+            dot.style.background = BOARD_COL_DOT[bucket.tone] || "var(--accent)";
+            head.appendChild(dot);
+            const h2 = document.createElement("h2");
+            h2.textContent = bucket.label;
+            h2.title = bucket.label;
+            head.appendChild(h2);
+            const count = document.createElement("span");
+            count.className = "bc-count";
+            count.textContent = String(items.length);
+            head.appendChild(count);
+            col.appendChild(head);
+
+            const body = document.createElement("div");
+            body.className = "board-col-body";
+            if (!items.length) {
+                const empty = document.createElement("p");
+                empty.className = "board-col-empty";
+                empty.textContent = isDoneTone(bucket.tone) ? "Drop to mark done" : "Drop here";
+                body.appendChild(empty);
+            } else {
+                items.forEach((t) => body.appendChild(buildBoardCard(t, childrenByParent, 0)));
             }
-            wrap.appendChild(details);
-            root.appendChild(wrap);
+            col.appendChild(body);
+
+            wireBoardColumnDrop(col, bucket.tone);
+            return col;
+        }
+
+        function boardRootTodos(openTodos) {
+            const ids = new Set(openTodos.map((t) => t.id));
+            return openTodos.filter((t) => {
+                const p = (t.parent_id || "").trim();
+                return !p || !ids.has(p);
+            });
+        }
+
+        function renderBoard(root, openTodos) {
+            const board = document.createElement("div");
+            board.className = "board";
+            const childrenByParent = hideNested ? null : indexChildrenByParent(openTodos);
+            const roots = hideNested ? openTodos : boardRootTodos(openTodos);
+            STATUS_BUCKETS.forEach((bucket) => {
+                const items = hideNested
+                    ? openTodos.filter((t) => statusToneForTodo(t) === bucket.tone)
+                    : roots.filter((t) => statusToneForTodo(t) === bucket.tone);
+                board.appendChild(buildBoardColumn(bucket, items, childrenByParent));
+            });
+            ARCHIVE_BUCKETS.forEach((bucket) => {
+                board.appendChild(buildBoardColumn(bucket, [], null));
+            });
+            root.appendChild(board);
+        }
+
+        // A board column is too narrow for the task page, so in board mode the
+        // same builder renders into a centered overlay instead of inline.
+        function openTaskPageModal(todo) {
+            const modal = document.getElementById("taskPageModal");
+            const card = document.getElementById("taskPageModalCard");
+            if (!modal || !card) return;
+            card.replaceChildren(buildExpandPanel(todo));
+            modal.classList.remove("hidden");
+        }
+
+        function closeTaskPageModal() {
+            const modal = document.getElementById("taskPageModal");
+            if (!modal || modal.classList.contains("hidden")) return;
+            modal.classList.add("hidden");
+            document.getElementById("taskPageModalCard").replaceChildren();
+        }
+
+        function syncTaskPageModal() {
+            const todo = viewMode === "board" && expandedId ? cardTodoById(expandedId) : null;
+            if (!todo) {
+                closeTaskPageModal();
+                return;
+            }
+            openTaskPageModal(todo);
         }
 
         function splitPinnedTodos(todos) {
@@ -3896,6 +4539,10 @@
         }
 
         function renderOpen(root, openTodos) {
+            if (viewMode === "board") {
+                renderBoard(root, openTodos);
+                return;
+            }
             const { pinned, rest } = splitPinnedTodos(openTodos);
             if (pinned.length) {
                 root.appendChild(listSection("Pinned", pinned, "var(--accent)"));
@@ -3948,9 +4595,51 @@
         }
 
         function setGroup(next) {
-            groupMode = next;
+            groupMode = GROUP_MODES.has(next) ? next : "list";
             saveUiState();
-            updateGroupToggleUi();
+            updateGroupPickerUi();
+            scheduleRender();
+        }
+
+        function updateViewToggleUi() {
+            document.querySelectorAll(".seg [data-view]").forEach((btn) => {
+                const on = btn.dataset.view === viewMode;
+                btn.classList.toggle("active", on);
+                btn.setAttribute("aria-selected", on ? "true" : "false");
+            });
+            // Grouping is a list-only concern; the board always groups by status.
+            const group = document.getElementById("groupPicker");
+            if (group) group.classList.toggle("hidden", viewMode === "board");
+            updateHideNestedUi();
+        }
+
+        function updateHideNestedUi() {
+            const btn = document.getElementById("hideNestedBtn");
+            if (!btn) return;
+            btn.classList.toggle("active", hideNested);
+            btn.setAttribute("aria-checked", hideNested ? "true" : "false");
+            // List omits children; board flattens them into columns (plan contract).
+            const onLabel = viewMode === "board"
+                ? "Show nested under parents"
+                : "Show nested tasks";
+            const offLabel = viewMode === "board"
+                ? "Flatten nested into columns"
+                : "Hide nested tasks";
+            btn.title = hideNested ? onLabel : offLabel;
+            btn.setAttribute("aria-label", hideNested ? onLabel : offLabel);
+        }
+
+        function setHideNested(next) {
+            hideNested = Boolean(next);
+            saveUiState();
+            updateHideNestedUi();
+            scheduleRender();
+        }
+
+        function setView(next) {
+            viewMode = next === "board" ? "board" : "list";
+            saveUiState();
+            updateViewToggleUi();
             scheduleRender();
         }
 
@@ -4058,7 +4747,7 @@
             } else {
                 awaitingPayload = false;
                 openCountEl.classList.remove("loading");
-                openCountEl.textContent = total ? String(open) : "—";
+                openCountEl.textContent = total ? String(open) + " open" : "—";
             }
             document.getElementById("statsSub").textContent = total
                 ? doneCount + " done · " + total + " total"
@@ -4088,37 +4777,24 @@
                 if (q || (filterLabel && filter !== "done")) {
                     renderFilteredEmpty(root, filterLabel || "search");
                 } else if (!q) {
-                    const disc = boot.discovery || {};
-                    const hasDisc =
-                        (disc.missingPrs && disc.missingPrs.length) ||
-                        (disc.cloudAgents && disc.cloudAgents.length);
-                    if (!hasDisc) {
-                        empty.classList.remove("hidden");
-                        document.getElementById("emptyDbPath").classList.remove("hidden");
-                    }
+                    empty.classList.remove("hidden");
+                    document.getElementById("emptyDbPath").classList.remove("hidden");
                 }
                 const disc = boot.discovery || {};
                 const footParts = [];
                 if (disc.scannedAt) footParts.push("Scan " + shortAt(disc.scannedAt));
                 footParts.push("Refreshed " + shortAt(boot.generatedAt));
                 renderFootMeta(footParts);
-                renderReconcileDock();
+                syncTaskPageModal();
                 return;
             }
             empty.classList.add("hidden");
-
-            const showReconcileFirst = pillFilter === "needsReconcile" && reconcileItemCount() > 0;
 
             if (filter === "open") {
                 if (openTodos.length) {
                     renderOpen(root, openTodos);
                 } else if (filteredOut && filterLabel) {
                     renderFilteredEmpty(root, filterLabel);
-                } else if (showReconcileFirst) {
-                    const hint = document.createElement("div");
-                    hint.className = "empty";
-                    hint.innerHTML = "<strong>Reconcile inbound PRs</strong> Attach or add rows in the section below.";
-                    root.appendChild(hint);
                 } else if (q && !baseOpenTodos.length) {
                     renderFilteredEmpty(root, "search");
                 } else {
@@ -4141,11 +4817,13 @@
 
             const footParts = [];
             footParts.push(
-                groupMode === "repo"
-                    ? "Drag ⠿ — edges reorder; center nests; drop section header to set repo"
-                    : groupMode === "status"
-                        ? "Drag ⠿ — edges reorder; center nests; drop section header to set status"
-                        : "Drag ⠿ — edges reorder; center nests"
+                viewMode === "board"
+                    ? "Drag a card to another column to set its status"
+                    : groupMode === "repo"
+                        ? "Drag ⠿ — edges reorder; center nests; drop section header to set repo"
+                        : groupMode === "status"
+                            ? "Drag ⠿ — edges reorder; center nests; drop section header to set status"
+                            : "Drag ⠿ — edges reorder; center nests"
             );
             if (activeTasks.updatedAt) {
                 footParts.push("Snapshot " + shortAt(activeTasks.updatedAt));
@@ -4157,18 +4835,32 @@
             footParts.push("Refreshed " + shortAt(boot.generatedAt));
             renderFootMeta(footParts);
 
-            renderReconcileDock();
+            syncTaskPageModal();
 
             if (kbdFocusId) {
-                const focused = document.querySelector(
-                    '.task-card[data-id="' + CSS.escape(kbdFocusId) + '"]'
-                );
+                const focused = cardElementById(kbdFocusId);
                 if (focused) {
                     focused.classList.add("kbd-focus");
                 } else {
                     kbdFocusId = null;
                 }
             }
+
+            restoreEditFocus();
+        }
+
+        // The host pushes a full update after every write, so the rebuild that
+        // follows a commit would otherwise drop the caret to <body> every time.
+        function restoreEditFocus() {
+            if (!lastEditFocus) return;
+            const target = lastEditFocus;
+            lastEditFocus = null;
+            if (document.activeElement && document.activeElement !== document.body) return;
+            const card = cardElementById(target.id);
+            const el = card && card.querySelector(
+                '.editable[data-edit-field="' + target.field + '"]'
+            );
+            if (el) el.focus();
         }
 
         document.getElementById("quickAddTitle").addEventListener("input", (ev) => {
@@ -4192,9 +4884,6 @@
             document.getElementById("quickAddForm").classList.remove("has-text");
         });
 
-        document.getElementById("emptyReconcileBtn").onclick = () => {
-            invalidateAndRefresh();
-        };
         document.getElementById("emptyDbBtn").onclick = () => vscode.postMessage({ type: "openDatabase" });
         document.getElementById("emptySyncBtn").onclick = () => {
             setRefreshSpinning(true);
@@ -4232,8 +4921,24 @@
             btn.classList.toggle("active", on);
             btn.setAttribute("aria-selected", on ? "true" : "false");
         });
-        document.getElementById("groupToggle").addEventListener("click", () => cycleGroupMode());
-        updateGroupToggleUi();
+
+        document.querySelectorAll('.seg [data-view]').forEach((btn) => {
+            btn.addEventListener("click", () => setView(btn.dataset.view || "list"));
+        });
+        updateViewToggleUi();
+
+        document.getElementById("taskPageModal").addEventListener("click", (ev) => {
+            if (ev.target.id === "taskPageModal") {
+                expandedId = null;
+                saveUiState();
+                scheduleRender();
+            }
+        });
+        document.getElementById("groupSelect").addEventListener("change", (ev) => {
+            setGroup(ev.target.value);
+        });
+        updateGroupPickerUi();
+        updateHideNestedUi();
 
         document.getElementById("reloadBtn").onclick = () => invalidateAndRefresh();
         document.getElementById("popOutBtn").onclick = () => vscode.postMessage({ type: "popOut" });
@@ -4316,10 +5021,10 @@
             const primary = (boot.activeTasks.todos || []).find((t) => t.id === primaryId);
             const ok = window.confirm(
                 "Nest " +
-                    mergeIds.length +
-                    " task(s) under \"" +
-                    (primary ? primary.title || primary.label : "selected task") +
-                    "\"?"
+                mergeIds.length +
+                " task(s) under \"" +
+                (primary ? primary.title || primary.label : "selected task") +
+                "\"?"
             );
             if (!ok) {
                 return;
@@ -4335,7 +5040,7 @@
             hideDoneModal();
         }
         document.getElementById("doneSessionBtn").onclick = () => finishDone("session");
-        document.getElementById("doneArchiveBtn").onclick = () => finishDone("archive");
+        document.getElementById("donePersistBtn").onclick = () => finishDone("done");
         document.getElementById("doneRemoveBtn").onclick = () => finishDone("remove");
         document.getElementById("doneUndoBtn").onclick = () => hideDoneModal();
         document.getElementById("doneModal").addEventListener("click", (ev) => {
@@ -4346,6 +5051,13 @@
                 const mergeModal = document.getElementById("mergeModal");
                 if (mergeModal && !mergeModal.classList.contains("hidden")) {
                     hideMergeModal();
+                    return;
+                }
+                const taskPage = document.getElementById("taskPageModal");
+                if (taskPage && !taskPage.classList.contains("hidden")) {
+                    expandedId = null;
+                    saveUiState();
+                    scheduleRender();
                     return;
                 }
             }

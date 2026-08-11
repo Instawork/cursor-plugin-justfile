@@ -6,7 +6,6 @@ import { clearCloudApiKey, setCloudApiKey } from "./cloudSecrets";
 import { invalidateTaskDiscoveryCache } from "./discovery";
 import { hooksInstalled, installHooks } from "./installHooks";
 import { PanelHost, SidebarPanelProvider } from "./panelHost";
-import { resetReconcileFeedBaseline } from "./reconcileFeed";
 
 let host: PanelHost | undefined;
 
@@ -99,29 +98,6 @@ export function activate(context: vscode.ExtensionContext): void {
       invalidateTaskDiscoveryCache();
       host?.pushUpdate({ forceDiscovery: true });
       void vscode.window.showInformationMessage("Active Tasks cloud API key cleared.");
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("activeTasks.resetReconcileBaseline", () => {
-      const ms = resetReconcileFeedBaseline();
-      invalidateTaskDiscoveryCache();
-      host?.pushUpdate({ forceDiscovery: true });
-      void vscode.window.showInformationMessage(
-        `Reconcile baseline set to now (${new Date(ms).toLocaleString()}). Historical PRs/agents will not backfill while backfill is off.`
-      );
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((e) => {
-      if (
-        e.affectsConfiguration("activeTasks.reconcile.backfill") ||
-        e.affectsConfiguration("activeTasks.reconcile.includeReviewRequested")
-      ) {
-        invalidateTaskDiscoveryCache();
-        host?.pushUpdate({ forceDiscovery: true });
-      }
     })
   );
 
@@ -236,7 +212,7 @@ export function activate(context: vscode.ExtensionContext): void {
   if (!hooksInstalled()) {
     void vscode.window
       .showInformationMessage(
-        "Active Tasks: install Cursor hooks to inject session context.",
+        "Active Tasks: install the Cursor hook (session digest + board refresh).",
         "Install hooks"
       )
       .then((choice) => {

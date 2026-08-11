@@ -1,5 +1,4 @@
 import * as fs from "fs/promises";
-import * as vscode from "vscode";
 import { MAX_PROMPT_BYTES, resolvePromptTarget } from "./pathSafety";
 import type { SaveStatus } from "./types";
 
@@ -19,6 +18,16 @@ export type PromptLoadErr = {
 
 export type PromptLoadResult = PromptLoadOk | PromptLoadErr;
 
+export interface PromptWatcher {
+  dispose(): void;
+  onDidChange?(listener: () => void): { dispose(): void };
+  onDidCreate?(listener: () => void): { dispose(): void };
+}
+
+export type WatcherFactory = (targetPath: string) => PromptWatcher;
+
+const noopWatcherFactory: WatcherFactory = () => ({ dispose() {} });
+
 export class PromptSession {
   private absolutePath: string | undefined;
   private relativePath: string | undefined;
@@ -28,9 +37,10 @@ export class PromptSession {
   private dirty = false;
   private saveStatus: SaveStatus = "idle";
   private debounce: NodeJS.Timeout | undefined;
-  private watcher: vscode.FileSystemWatcher | undefined;
+  private watcher: PromptWatcher | undefined;
   private writing = false;
   private delayMs: number;
+  private readonly createWatcher: WatcherFactory;
 
   constructor(
     private readonly onStatus: (status: SaveStatus) => void,
@@ -41,8 +51,10 @@ export class PromptSession {
     }) => void,
     private readonly onExternalReload: (content: string) => void,
     delayMs = 400,
+    createWatcher: WatcherFactory = noopWatcherFactory,
   ) {
     this.delayMs = delayMs;
+    this.createWatcher = createWatcher;
   }
 
   getStatus(): SaveStatus {
@@ -51,6 +63,14 @@ export class PromptSession {
 
   getNodeId(): string | undefined {
     return this.nodeId;
+  }
+
+  getAbsolutePath(): string | undefined {
+    return this.absolutePath;
+  }
+
+  getRelativePath(): string | undefined {
+    return this.relativePath;
   }
 
   setDelay(ms: number): void {
@@ -193,6 +213,18 @@ export class PromptSession {
     return this.buffer;
   }
 
+  /** Test/helper: force conflict state with given disk content. */
+  forceConflictForTest(diskContent: string): void {
+    this.diskContent = diskContent;
+    this.dirty = true;
+    this.setStatus("conflict");
+    this.onConflict({
+      nodeId: this.nodeId ?? "",
+      relativePath: this.relativePath ?? "",
+      diskContent,
+    });
+  }
+
   private async writeBuffer(): Promise<void> {
     if (!this.absolutePath || !this.dirty || this.writing) {
       return;
@@ -218,9 +250,8 @@ export class PromptSession {
 
   private watch(targetPath: string): void {
     this.clearWatcher();
-    const watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(vscode.Uri.file(pathDirname(targetPath)), pathBasename(targetPath)),
-    );
+    const watcher = this.createWatcher(targetPath);
+    this.watcher = watcher;
     const onChange = async () => {
       if (this.writing || !this.absolutePath) {
         return;
@@ -249,9 +280,8 @@ export class PromptSession {
         // Missing after delete: surface on next select.
       }
     };
-    watcher.onDidChange(() => void onChange());
-    watcher.onDidCreate(() => void onChange());
-    this.watcher = watcher;
+    watcher.onDidChange?.(() => void onChange());
+    watcher.onDidCreate?.(() => void onChange());
   }
 
   private clearWatcher(): void {
@@ -263,14 +293,4 @@ export class PromptSession {
     this.saveStatus = status;
     this.onStatus(status);
   }
-}
-
-function pathDirname(p: string): string {
-  const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-  return idx >= 0 ? p.slice(0, idx) : ".";
-}
-
-function pathBasename(p: string): string {
-  const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-  return idx >= 0 ? p.slice(idx + 1) : p;
 }

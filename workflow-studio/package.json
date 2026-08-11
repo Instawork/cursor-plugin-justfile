@@ -2,7 +2,7 @@
   "name": "workflow-studio",
   "displayName": "Workflow Studio",
   "description": "Inspect Mermaid workflows and edit node-bound Markdown prompts.",
-  "version": "0.1.3",
+  "version": "0.4.1",
   "publisher": "cursorworkflowstudio",
   "repository": {
     "type": "git",
@@ -19,7 +19,8 @@
     "onStartupFinished",
     "onCustomEditor:workflowStudio.editor",
     "onCommand:workflowStudio.open",
-    "onCommand:workflowStudio.openFile"
+    "onCommand:workflowStudio.openFile",
+    "onCommand:workflowStudio.openCursorWorkflow"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -47,6 +48,47 @@
         "title": "Open Workflow File…",
         "category": "Workflow Studio",
         "icon": "$(file-code)"
+      },
+      {
+        "command": "workflowStudio.openCursorWorkflow",
+        "title": "Open Cursor Workflow…",
+        "category": "Workflow Studio",
+        "icon": "$(folder-library)"
+      },
+      {
+        "command": "workflowStudio.bindSelectedNode",
+        "title": "Bind Selected Node…",
+        "category": "Workflow Studio"
+      },
+      {
+        "command": "workflowStudio.nextUnbound",
+        "title": "Next Unbound Node",
+        "category": "Workflow Studio"
+      },
+      {
+        "command": "workflowStudio.focusRail",
+        "title": "Focus Structure Rail",
+        "category": "Workflow Studio"
+      },
+      {
+        "command": "workflowStudio.focusGraph",
+        "title": "Focus Graph",
+        "category": "Workflow Studio"
+      },
+      {
+        "command": "workflowStudio.focusPrompt",
+        "title": "Focus Prompt Editor",
+        "category": "Workflow Studio"
+      },
+      {
+        "command": "workflowStudio.showLog",
+        "title": "Show Log",
+        "category": "Workflow Studio"
+      },
+      {
+        "command": "workflowStudio.bindPromptsNow",
+        "title": "Bind Prompt Files Now",
+        "category": "Workflow Studio"
       }
     ],
     "menus": {
@@ -56,6 +98,30 @@
         },
         {
           "command": "workflowStudio.openFile"
+        },
+        {
+          "command": "workflowStudio.openCursorWorkflow"
+        },
+        {
+          "command": "workflowStudio.bindSelectedNode"
+        },
+        {
+          "command": "workflowStudio.nextUnbound"
+        },
+        {
+          "command": "workflowStudio.focusRail"
+        },
+        {
+          "command": "workflowStudio.focusGraph"
+        },
+        {
+          "command": "workflowStudio.focusPrompt"
+        },
+        {
+          "command": "workflowStudio.showLog"
+        },
+        {
+          "command": "workflowStudio.bindPromptsNow"
         }
       ],
       "explorer/context": [
@@ -90,25 +156,39 @@
           "maximum": 5000,
           "scope": "resource",
           "description": "Milliseconds to wait after prompt edits before saving."
+        },
+        "workflowStudio.notifyOnNewCursorWorkflow": {
+          "type": "boolean",
+          "default": true,
+          "description": "When a new .mmd appears under any .cursor/ folder, offer to open it in Workflow Studio."
+        },
+        "workflowStudio.autoBindPrompts": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "On open, automatically write %% @prompt directives when sibling steps/NN-*.md files map unambiguously to numbered graph nodes. Never overwrites existing directives; skips when any match is ambiguous."
         }
       }
     }
   },
   "scripts": {
-    "copy:mermaid": "node scripts/copy-mermaid.mjs",
-    "compile": "tsc -p ./ && npm run copy:mermaid",
+    "compile": "tsc -p ./ && npm run bundle:beautiful-mermaid && npm run bundle:beautiful-mermaid-cjs",
+    "bundle:beautiful-mermaid": "node scripts/bundle-beautiful-mermaid.mjs",
+    "bundle:beautiful-mermaid-cjs": "node scripts/bundle-beautiful-mermaid-cjs.mjs",
+    "render:svgs": "node scripts/render-workflow-svgs.mjs",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test test/directives.mjs test/pathSafety.mjs",
+    "test": "npm run compile && node --test test/*.mjs",
     "vscode:prepublish": "npm run compile",
     "vsix": "npm run compile && npm test && vsce package --no-dependencies --allow-missing-repository"
   },
   "dependencies": {
-    "mermaid": "^11.0.0"
+    "beautiful-mermaid": "^1.1.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^2.32.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.4.0"
   }
 }

@@ -2,27 +2,40 @@ export const STATUS_KEYS = [
   "blocked",
   "review",
   "progress",
-  "ready",
-  "paused",
-  "other",
+  "prioritized",
+  "backlog",
 ] as const;
 
 export type StatusKey = (typeof STATUS_KEYS)[number];
 
 const STATUS_KEY_SET = new Set<string>(STATUS_KEYS);
 
+/** Old keys rewritten to backlog on read and on schema migrate. */
+const LEGACY_STATUS_KEY_MAP: Record<string, StatusKey> = {
+  ready: "backlog",
+  paused: "backlog",
+  other: "backlog",
+};
+
 export function isStatusKey(raw: string): raw is StatusKey {
   return STATUS_KEY_SET.has(raw);
 }
 
 export function normalizeStatusKey(raw: unknown): StatusKey {
-  if (typeof raw === "string" && isStatusKey(raw.trim().toLowerCase())) {
-    return raw.trim().toLowerCase() as StatusKey;
+  if (typeof raw !== "string") {
+    return "backlog";
   }
-  return "other";
+  const k = raw.trim().toLowerCase();
+  if (isStatusKey(k)) {
+    return k;
+  }
+  if (LEGACY_STATUS_KEY_MAP[k]) {
+    return LEGACY_STATUS_KEY_MAP[k];
+  }
+  return "backlog";
 }
 
-/** Infer bucket from legacy free-text status (panel + backfill). */
+/** Infer bucket from free-text status (panel + backfill). */
 export function inferStatusKeyFromLabel(status: string | null | undefined): StatusKey {
   const s = String(status || "").toLowerCase();
   if (/block|fail|red|tach/.test(s)) {
@@ -34,13 +47,13 @@ export function inferStatusKeyFromLabel(status: string | null | undefined): Stat
   if (/progress|step|walkthrough|active branch/.test(s)) {
     return "progress";
   }
-  if (/ready|green|merge|ci green|pushed/.test(s)) {
-    return "ready";
+  if (/priorit/.test(s)) {
+    return "prioritized";
   }
-  if (/pause|paused/.test(s)) {
-    return "paused";
+  if (/backlog|ready|green|merge|ci green|pushed|pause/.test(s)) {
+    return "backlog";
   }
-  return "other";
+  return "backlog";
 }
 
 export function statusKeyLabel(key: StatusKey): string {
@@ -48,15 +61,13 @@ export function statusKeyLabel(key: StatusKey): string {
     case "blocked":
       return "Blocked";
     case "review":
-      return "In review";
+      return "In Review";
     case "progress":
-      return "In progress";
-    case "ready":
-      return "Ready";
-    case "paused":
-      return "Paused";
+      return "In Progress";
+    case "prioritized":
+      return "Prioritized";
     default:
-      return "Other";
+      return "Backlog";
   }
 }
 
@@ -83,8 +94,9 @@ export function urgencyFromTodo(input: {
   if (input.done) {
     return "muted";
   }
+  // Priority is 0 = highest, matching the roster and the Python CLI.
   const p = clampPriority(input.priority ?? 1);
-  if (p >= 3) {
+  if (p <= 0) {
     return "high";
   }
   const key =
@@ -94,11 +106,11 @@ export function urgencyFromTodo(input: {
   if (key === "blocked") {
     return "high";
   }
-  if (key === "review" || key === "progress") {
-    return p >= 2 ? "high" : "medium";
+  if (key === "review" || key === "progress" || key === "prioritized") {
+    return p <= 1 ? "high" : "medium";
   }
-  if (key === "ready") {
+  if (key === "backlog") {
     return "low";
   }
-  return p >= 2 ? "medium" : "muted";
+  return p <= 1 ? "medium" : "muted";
 }

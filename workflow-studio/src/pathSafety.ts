@@ -50,10 +50,16 @@ async function nearestExistingAncestor(candidate: string): Promise<string> {
   }
 }
 
+export interface ResolvePromptOptions {
+  /** When true, missing intermediate directories are allowed if the nearest existing ancestor stays inside a workspace root. */
+  allowMissingDirs?: boolean;
+}
+
 export async function resolvePromptTarget(
   diagramPath: string,
   relativePath: string,
   workspaceRoots: string[],
+  opts?: ResolvePromptOptions,
 ): Promise<PathSafetyResult> {
   if (path.isAbsolute(relativePath)) {
     return { safe: false, exists: false, reason: "Prompt path must be relative to the workflow file." };
@@ -119,7 +125,7 @@ export async function resolvePromptTarget(
       reason: "Prompt path would escape the open workspace through a symbolic link.",
     };
   }
-  if (ancestor !== path.dirname(targetPath)) {
+  if (ancestor !== path.dirname(targetPath) && !opts?.allowMissingDirs) {
     return {
       safe: false,
       exists: false,

@@ -21,14 +21,36 @@ import {
   type StatusKey,
 } from "./statusKeyUtil";
 import {
+  findSemanticDuplicate,
+  type ConsolidationReasonCode,
+} from "./workConsolidation";
+import {
+  doneReasonForStatusKey,
+  normalizeDoneReason,
+  type DoneReason,
+} from "./taskModel";
+import {
   insertAfterSubtreeInOrder,
   isUnderAncestor,
   parentIdMap,
 } from "./taskNestUtil";
+import { planPathFromLink } from "./planLink";
 
-const SCHEMA_VERSION = 2;
+export type InsertWorkResult = {
+  id: string | null;
+  outcome: "created" | "reused" | "refused_done" | "invalid";
+  hitTitle?: string;
+  reasonCode?: ConsolidationReasonCode;
+};
+
+const SCHEMA_VERSION = 3;
 const TAG_VOCAB_META = "tag_vocab";
-const VALID_REPOS = new Set(["instawork", "finch", "infrastructure"]);
+const VALID_REPOS = new Set([
+  "instawork",
+  "finch",
+  "infrastructure",
+  "other",
+]);
 
 export function activeTasksDbPath(): string {
   return (
@@ -55,11 +77,16 @@ type DbRow = {
   branch: string | null;
   worktree: string | null;
   notes: string | null;
+  source_url: string | null;
+  stream_source: string | null;
+  channel: string | null;
+  due: string | null;
   pr_number: number | null;
   pr_url: string | null;
   prs_json: string;
   links_json: string;
   tags_json: string;
+  spec: string | null;
   done: number;
   done_at: string | null;
   done_reason: string | null;
@@ -104,7 +131,64 @@ function parseJsonArray<T>(raw: string): T[] {
   }
 }
 
-function rowToTodo(row: DbRow): ParsedSessionTodo {
+/**
+ * Reject malformed JSON on write. `parseJsonArray` swallows errors so reads stay
+ * lenient, which means using it to validate stores the garbage and reads it back
+ * as an empty array.
+ */
+function validJsonArrayOrThrow(raw: string, field: string): string {
+  const trimmed = raw.trim() || "[]";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${field} is not valid JSON`);
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(`${field} must be a JSON array`);
+  }
+  return trimmed;
+}
+
+/** Same set the CLI enforces; the two must not drift. */
+export const VALID_STREAM_SOURCES = [
+  "slack",
+  "spark_mail",
+  "github",
+  "asana",
+  "manual",
+] as const;
+
+function normalizeStreamSource(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (!(VALID_STREAM_SOURCES as readonly string[]).includes(trimmed)) {
+    throw new Error(
+      `stream_source must be one of ${VALID_STREAM_SOURCES.join(", ")}`
+    );
+  }
+  return trimmed;
+}
+
+/** Keep `due` a plain YYYY-MM-DD so sorting is lexical and timezone-free. */
+function normalizeDueDate(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(trimmed);
+  if (!match) {
+    throw new Error("due must be an ISO date (YYYY-MM-DD)");
+  }
+  return match[1]!;
+}
+
+function rowToTodo(
+  row: DbRow,
+  effectiveSpec: string | null
+): ParsedSessionTodo {
   const prs = parseJsonArray<TaskPr>(row.prs_json);
   const links = parseJsonArray<TaskLink>(row.links_json);
   const tags = parseTagsJson(row.tags_json ?? "[]");
@@ -143,8 +227,14 @@ function rowToTodo(row: DbRow): ParsedSessionTodo {
     prs: prs.length ? prs : undefined,
     links: links.length ? links : undefined,
     tags: tags.length ? tags : undefined,
+    source_url: row.source_url ?? undefined,
+    stream_source: row.stream_source ?? undefined,
+    channel: row.channel ?? undefined,
+    due: row.due ?? undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    spec: row.spec,
+    spec_effective: effectiveSpec,
   };
   if (row.next_action?.trim()) {
     todo.next_action = row.next_action.trim();
@@ -165,7 +255,7 @@ function rowToTodo(row: DbRow): ParsedSessionTodo {
     todo.done_at = row.done_at.trim();
   }
   if (row.done_reason?.trim()) {
-    todo.done_reason = row.done_reason.trim() as ParsedSessionTodo["done_reason"];
+    todo.done_reason = normalizeDoneReason(row.done_reason);
   }
   return todo;
 }
@@ -219,7 +309,7 @@ function ensureSchema(db: Database.Database): void {
 }
 
 const V2_COLUMNS: { name: string; ddl: string }[] = [
-  { name: "status_key", ddl: "TEXT NOT NULL DEFAULT 'other'" },
+  { name: "status_key", ddl: "TEXT NOT NULL DEFAULT 'backlog'" },
   { name: "priority", ddl: "INTEGER NOT NULL DEFAULT 1" },
   { name: "pinned", ddl: "INTEGER NOT NULL DEFAULT 0" },
   { name: "next_action", ddl: "TEXT" },
@@ -232,6 +322,21 @@ const V2_COLUMNS: { name: string; ddl: string }[] = [
   { name: "done_reason", ddl: "TEXT" },
 ];
 
+/**
+ * Capture provenance, carried over when the Notion assistant dashboard was
+ * folded into this table. `due` is a plain ISO date, not a timestamp.
+ */
+const V3_COLUMNS: { name: string; ddl: string }[] = [
+  { name: "source_url", ddl: "TEXT" },
+  { name: "stream_source", ddl: "TEXT" },
+  { name: "channel", ddl: "TEXT" },
+  { name: "due", ddl: "TEXT" },
+];
+
+const SPEC_COLUMNS: { name: string; ddl: string }[] = [
+  { name: "spec", ddl: "TEXT" },
+];
+
 function backfillStatusKeys(db: Database.Database): void {
   const rows = db
     .prepare("SELECT id, status, status_key FROM active_work")
@@ -241,14 +346,23 @@ function backfillStatusKeys(db: Database.Database): void {
   );
   for (const row of rows) {
     const current = row.status_key?.trim();
-    if (current && current !== "other") {
+    if (current && current !== "other" && current !== "backlog") {
       continue;
     }
     const inferred = inferStatusKeyFromLabel(row.status);
-    if (inferred !== "other") {
+    if (inferred !== "backlog") {
       upd.run(inferred, row.id);
     }
   }
+}
+
+/** ready / paused / other → backlog (one-time rewrite, safe to re-run). */
+function migrateLegacyStatusKeys(db: Database.Database): void {
+  db.prepare(
+    `UPDATE active_work
+     SET status_key = 'backlog'
+     WHERE status_key IN ('ready', 'paused', 'other')`
+  ).run();
 }
 
 function backfillCreatedAt(db: Database.Database): void {
@@ -269,13 +383,29 @@ function migrateSchemaColumns(db: Database.Database): void {
       `ALTER TABLE active_work ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'`
     );
   }
-  for (const col of V2_COLUMNS) {
+  for (const col of [...V2_COLUMNS, ...V3_COLUMNS, ...SPEC_COLUMNS]) {
     if (!names.has(col.name)) {
       db.exec(`ALTER TABLE active_work ADD COLUMN ${col.name} ${col.ddl}`);
     }
   }
+  const unclaimed = db
+    .prepare("SELECT id, links_json FROM active_work WHERE spec IS NULL")
+    .all() as { id: string; links_json: string }[];
+  const setSpec = db.prepare(
+    "UPDATE active_work SET spec = ? WHERE id = ? AND spec IS NULL"
+  );
+  for (const row of unclaimed) {
+    const plan = parseJsonArray<TaskLink>(row.links_json)
+      .filter((link) => link.label === "plan")
+      .map(planPathFromLink)
+      .find((value): value is string => Boolean(value));
+    if (plan) {
+      setSpec.run(plan, row.id);
+    }
+  }
   backfillCreatedAt(db);
   backfillStatusKeys(db);
+  migrateLegacyStatusKeys(db);
 }
 
 function collectTagsFromDb(db: Database.Database): string[] {
@@ -329,28 +459,22 @@ function tryImportLegacyTomlIfEmpty(): void {
       probe.close();
     }
   }
-  const scripts = [
-    path.join(
-      os.homedir(),
-      "code/cursor-contexts/scripts/active_tasks_db.py"
-    ),
-    path.join(__dirname, "..", "bundled", "hooks", "active_tasks_db.py"),
-  ];
+  const script = path.join(
+    os.homedir(),
+    "code/cursor-contexts/scripts/active_tasks_db.py"
+  );
+  if (!fs.existsSync(script)) {
+    return;
+  }
   const python = process.env.ACTIVE_TASKS_PYTHON || "python3.11";
   const env = { ...process.env, ACTIVE_TASKS_DB_PATH: dbPath };
-  for (const script of scripts) {
-    if (!fs.existsSync(script)) {
-      continue;
-    }
-    try {
-      execFileSync(python, [script, "import-toml-if-empty"], {
-        stdio: "ignore",
-        env,
-      });
-      return;
-    } catch {
-      /* try next script */
-    }
+  try {
+    execFileSync(python, [script, "import-toml-if-empty"], {
+      stdio: "ignore",
+      env,
+    });
+  } catch {
+    /* import best-effort */
   }
 }
 
@@ -364,6 +488,9 @@ export function openActiveTasksDb(): Database.Database {
   dbInstance = new Database(dbPath);
   dbInstance.pragma("journal_mode = WAL");
   dbInstance.pragma("foreign_keys = ON");
+  // The Python CLI writing this same file waits 30s for a lock; without a
+  // matching timeout the panel gives up first and reports a generic save failure.
+  dbInstance.pragma("busy_timeout = 30000");
   ensureSchema(dbInstance);
   return dbInstance;
 }
@@ -374,11 +501,26 @@ export function loadTodosFromDb(): ParsedSessionTodo[] {
   const rows = db
     .prepare(
       `SELECT * FROM active_work
-       ORDER BY pinned DESC, priority DESC, sort_order ASC, updated_at DESC`
+       ORDER BY pinned DESC, priority ASC, sort_order ASC, updated_at DESC`
     )
     .all() as DbRow[];
+  const specById = new Map(rows.map((row) => [row.id, row.spec]));
+  const parentById = new Map(rows.map((row) => [row.id, row.parent_id]));
+  const effectiveSpec = (rowId: string): string | null => {
+    const seen = new Set<string>();
+    let current: string | null = rowId;
+    while (current && !seen.has(current)) {
+      seen.add(current);
+      const spec = specById.get(current);
+      if (spec) {
+        return spec;
+      }
+      current = parentById.get(current) ?? null;
+    }
+    return null;
+  };
   return rows.map((row) => {
-    const todo = rowToTodo(row);
+    const todo = rowToTodo(row, effectiveSpec(row.id));
     if (hidden.has(row.id)) {
       todo.done = true;
     }
@@ -434,13 +576,14 @@ export function getMeta(key: string): string | null {
 
 export function reorderTasksInDb(orderIds: string[]): boolean {
   const db = openActiveTasksDb();
+  // Deliberately does not touch updated_at: one drag rewrites the whole open
+  // list, and bumping every row would erase the staleness signal.
   const update = db.prepare(
-    "UPDATE active_work SET sort_order = ?, updated_at = ? WHERE id = ?"
+    "UPDATE active_work SET sort_order = ? WHERE id = ?"
   );
   const tx = db.transaction((ids: string[]) => {
-    const ts = nowIso();
     ids.forEach((id, index) => {
-      update.run(index, ts, id);
+      update.run(index, id);
     });
   });
   tx(orderIds);
@@ -453,8 +596,20 @@ function loadOpenParentLinks(
   return db
     .prepare(
       `SELECT id, parent_id FROM active_work WHERE done = 0
-       ORDER BY pinned DESC, priority DESC, sort_order ASC, updated_at DESC`
+       ORDER BY pinned DESC, priority ASC, sort_order ASC, updated_at DESC`
     )
+    .all() as { id: string; parent_id: string | null }[];
+}
+
+/**
+ * Every row, not just open ones. A parent chain that passes through a done
+ * task is still a cycle, so validation must see the whole table.
+ */
+function loadAllParentLinks(
+  db: Database.Database
+): { id: string; parent_id: string | null }[] {
+  return db
+    .prepare("SELECT id, parent_id FROM active_work")
     .all() as { id: string; parent_id: string | null }[];
 }
 
@@ -488,6 +643,11 @@ function applyDragGroupSync(
     params.status = sync.status.trim();
   }
   if (sync.status_key !== undefined) {
+    const terminalReason = doneReasonForStatusKey(sync.status_key);
+    if (terminalReason) {
+      setTaskDoneInDb(childId, true, terminalReason);
+      return;
+    }
     sets.push("status_key = @status_key");
     params.status_key = normalizeStatusKey(sync.status_key);
   }
@@ -517,20 +677,22 @@ export function nestTaskUnderInDb(
   if (!child || child.done || !parent || parent.done) {
     return false;
   }
-  const links = loadOpenParentLinks(db);
+  const links = loadAllParentLinks(db);
   const map = parentIdMap(links);
   if (isUnderAncestor(map, parentId, childId)) {
     return false;
   }
-  const ts = nowIso();
-  db.prepare(
-    "UPDATE active_work SET parent_id = ?, updated_at = ? WHERE id = ?"
-  ).run(parentId, ts, childId);
-  applyDragGroupSync(db, childId, groupSync);
-  map.set(childId, parentId);
-  const order = loadOpenOrderIds(db);
-  const next = insertAfterSubtreeInOrder(order, parentId, childId, map);
-  reorderTasksInDb(next);
+  db.transaction(() => {
+    db.prepare(
+      "UPDATE active_work SET parent_id = ?, updated_at = ? WHERE id = ?"
+    ).run(parentId, nowIso(), childId);
+    applyDragGroupSync(db, childId, groupSync);
+    map.set(childId, parentId);
+    const order = loadOpenOrderIds(db);
+    reorderTasksInDb(
+      insertAfterSubtreeInOrder(order, parentId, childId, map)
+    );
+  })();
   return true;
 }
 
@@ -563,29 +725,30 @@ export function moveTaskSiblingInDb(
     if (!parentRow || parentRow.done) {
       return false;
     }
-    const links = loadOpenParentLinks(db);
+    const links = loadAllParentLinks(db);
     const map = parentIdMap(links);
     map.set(childId, newParent);
     if (isUnderAncestor(map, newParent, childId)) {
       return false;
     }
   }
-  const ts = nowIso();
-  db.prepare(
-    "UPDATE active_work SET parent_id = ?, updated_at = ? WHERE id = ?"
-  ).run(newParent, ts, childId);
-  applyDragGroupSync(db, childId, groupSync);
-  const order = loadOpenOrderIds(db).filter((id) => id !== childId);
-  let idx = order.indexOf(targetId);
-  if (idx < 0) {
-    order.push(childId);
-  } else {
-    if (after) {
-      idx += 1;
+  db.transaction(() => {
+    db.prepare(
+      "UPDATE active_work SET parent_id = ?, updated_at = ? WHERE id = ?"
+    ).run(newParent, nowIso(), childId);
+    applyDragGroupSync(db, childId, groupSync);
+    const order = loadOpenOrderIds(db).filter((id) => id !== childId);
+    let idx = order.indexOf(targetId);
+    if (idx < 0) {
+      order.push(childId);
+    } else {
+      if (after) {
+        idx += 1;
+      }
+      order.splice(idx, 0, childId);
     }
-    order.splice(idx, 0, childId);
-  }
-  reorderTasksInDb(order);
+    reorderTasksInDb(order);
+  })();
   return true;
 }
 
@@ -600,14 +763,15 @@ export function moveTaskToSectionInDb(
   if (!child || child.done) {
     return false;
   }
-  const ts = nowIso();
-  db.prepare(
-    "UPDATE active_work SET parent_id = NULL, updated_at = ? WHERE id = ?"
-  ).run(ts, childId);
-  applyDragGroupSync(db, childId, groupSync);
-  const order = loadOpenOrderIds(db).filter((id) => id !== childId);
-  order.push(childId);
-  reorderTasksInDb(order);
+  db.transaction(() => {
+    db.prepare(
+      "UPDATE active_work SET parent_id = NULL, updated_at = ? WHERE id = ?"
+    ).run(nowIso(), childId);
+    applyDragGroupSync(db, childId, groupSync);
+    const order = loadOpenOrderIds(db).filter((id) => id !== childId);
+    order.push(childId);
+    reorderTasksInDb(order);
+  })();
   return true;
 }
 
@@ -634,16 +798,16 @@ export function setTaskPinnedInDb(rowId: string, pinned: boolean): boolean {
   const newOrder = pinned
     ? [rowId, ...pinnedIds, ...unpinnedIds]
     : [...pinnedIds, rowId, ...unpinnedIds];
-  const ts = nowIso();
-  db.prepare(
+  const setPinned = db.prepare(
     "UPDATE active_work SET pinned = ?, updated_at = ? WHERE id = ?"
-  ).run(pinned ? 1 : 0, ts, rowId);
-  const update = db.prepare(
-    "UPDATE active_work SET sort_order = ?, updated_at = ? WHERE id = ?"
+  );
+  const setOrder = db.prepare(
+    "UPDATE active_work SET sort_order = ? WHERE id = ?"
   );
   const tx = db.transaction((ids: string[]) => {
+    setPinned.run(pinned ? 1 : 0, nowIso(), rowId);
     ids.forEach((id, index) => {
-      update.run(index, ts, id);
+      setOrder.run(index, id);
     });
   });
   tx(newOrder);
@@ -661,37 +825,54 @@ export function updateTaskFieldsInDb(
   if (!existing) {
     return false;
   }
-  const next = { ...existing };
-  if (fields.title !== undefined) {
-    next.title = fields.title.trim();
+  const terminalReason = doneReasonForStatusKey(fields.status_key);
+  const fieldsForUpdate: TaskFieldUpdate = { ...fields };
+  if (terminalReason !== null) {
+    delete fieldsForUpdate.status_key;
   }
-  if (fields.status !== undefined) {
-    next.status = fields.status.trim();
-    if (fields.status_key === undefined) {
+  const next = { ...existing };
+  if (fieldsForUpdate.title !== undefined) {
+    next.title = fieldsForUpdate.title.trim();
+  }
+  if (fieldsForUpdate.status !== undefined) {
+    next.status = fieldsForUpdate.status.trim();
+    if (fieldsForUpdate.status_key === undefined) {
       next.status_key = inferStatusKeyFromLabel(next.status);
     }
   }
-  if (fields.status_key !== undefined) {
-    next.status_key = normalizeStatusKey(fields.status_key);
+  if (fieldsForUpdate.status_key !== undefined) {
+    next.status_key = normalizeStatusKey(fieldsForUpdate.status_key);
   }
-  if (fields.priority !== undefined) {
-    next.priority = clampPriority(fields.priority);
+  if (fieldsForUpdate.priority !== undefined) {
+    next.priority = clampPriority(fieldsForUpdate.priority);
   }
-  if (fields.pinned !== undefined) {
-    next.pinned = fields.pinned ? 1 : 0;
+  if (fieldsForUpdate.pinned !== undefined) {
+    next.pinned = fieldsForUpdate.pinned ? 1 : 0;
   }
-  if (fields.next_action !== undefined) {
-    next.next_action = fields.next_action.trim() || null;
+  if (fieldsForUpdate.next_action !== undefined) {
+    next.next_action = fieldsForUpdate.next_action.trim() || null;
   }
-  if (fields.waiting_on !== undefined) {
-    next.waiting_on = fields.waiting_on.trim() || null;
+  if (fieldsForUpdate.waiting_on !== undefined) {
+    next.waiting_on = fieldsForUpdate.waiting_on.trim() || null;
   }
-  if (fields.blocked_by_id !== undefined) {
-    const v = fields.blocked_by_id?.trim();
+  if (fieldsForUpdate.blocked_by_id !== undefined) {
+    const v = fieldsForUpdate.blocked_by_id?.trim();
     next.blocked_by_id = v || null;
   }
-  if (fields.parent_id !== undefined) {
-    const v = fields.parent_id?.trim();
+  if (fieldsForUpdate.source_url !== undefined) {
+    next.source_url = fieldsForUpdate.source_url.trim() || null;
+  }
+  if (fieldsForUpdate.stream_source !== undefined) {
+    next.stream_source = normalizeStreamSource(fieldsForUpdate.stream_source);
+  }
+  if (fieldsForUpdate.channel !== undefined) {
+    next.channel = fieldsForUpdate.channel.trim() || null;
+  }
+  if (fieldsForUpdate.due !== undefined) {
+    next.due = normalizeDueDate(fieldsForUpdate.due);
+  }
+  if (fieldsForUpdate.parent_id !== undefined) {
+    const v = fieldsForUpdate.parent_id?.trim();
     if (v && v === rowId) {
       return false;
     }
@@ -702,7 +883,7 @@ export function updateTaskFieldsInDb(
       if (!parentRow || parentRow.done) {
         return false;
       }
-      const links = loadOpenParentLinks(db);
+      const links = loadAllParentLinks(db);
       const map = parentIdMap(links);
       map.set(rowId, v);
       if (isUnderAncestor(map, v, rowId)) {
@@ -711,40 +892,39 @@ export function updateTaskFieldsInDb(
     }
     next.parent_id = v || null;
   }
-  if (fields.cloud_agent_id !== undefined) {
-    next.cloud_agent_id = fields.cloud_agent_id?.trim() || null;
+  if (fieldsForUpdate.cloud_agent_id !== undefined) {
+    next.cloud_agent_id = fieldsForUpdate.cloud_agent_id?.trim() || null;
   }
-  if (fields.repo !== undefined) {
-    const trimmed = fields.repo.trim();
+  if (fieldsForUpdate.repo !== undefined) {
+    const trimmed = fieldsForUpdate.repo.trim();
     next.repo = trimmed && VALID_REPOS.has(trimmed) ? trimmed : null;
   }
-  if (fields.branch !== undefined) {
-    next.branch = fields.branch.trim() || null;
+  if (fieldsForUpdate.branch !== undefined) {
+    next.branch = fieldsForUpdate.branch.trim() || null;
   }
-  if (fields.worktree !== undefined) {
-    next.worktree = fields.worktree.trim() || null;
+  if (fieldsForUpdate.worktree !== undefined) {
+    next.worktree = fieldsForUpdate.worktree.trim() || null;
   }
-  if (fields.notes !== undefined) {
-    next.notes = fields.notes.trim() || null;
+  if (fieldsForUpdate.notes !== undefined) {
+    next.notes = fieldsForUpdate.notes.trim() || null;
   }
-  if (fields.pr_number !== undefined) {
-    next.pr_number = fields.pr_number;
+  if (fieldsForUpdate.pr_number !== undefined) {
+    next.pr_number = fieldsForUpdate.pr_number;
   }
-  if (fields.pr_url !== undefined) {
-    next.pr_url = fields.pr_url.trim() || null;
+  if (fieldsForUpdate.pr_url !== undefined) {
+    next.pr_url = fieldsForUpdate.pr_url.trim() || null;
   }
-  if (fields.tags !== undefined) {
-    next.tags_json = JSON.stringify(sanitizeTags(fields.tags));
+  if (fieldsForUpdate.tags !== undefined) {
+    next.tags_json = JSON.stringify(sanitizeTags(fieldsForUpdate.tags));
   }
-  if (fields.prs_json !== undefined) {
-    const raw = fields.prs_json.trim() || "[]";
-    parseJsonArray<TaskPr>(raw);
-    next.prs_json = raw;
+  if (fieldsForUpdate.prs_json !== undefined) {
+    next.prs_json = validJsonArrayOrThrow(fieldsForUpdate.prs_json, "prs_json");
   }
-  if (fields.links_json !== undefined) {
-    const raw = fields.links_json.trim() || "[]";
-    parseJsonArray<TaskLink>(raw);
-    next.links_json = raw;
+  if (fieldsForUpdate.links_json !== undefined) {
+    next.links_json = validJsonArrayOrThrow(
+      fieldsForUpdate.links_json,
+      "links_json"
+    );
   }
   next.updated_at = nowIso();
   db.prepare(`
@@ -754,6 +934,8 @@ export function updateTaskFieldsInDb(
       next_action = @next_action, waiting_on = @waiting_on,
       blocked_by_id = @blocked_by_id, parent_id = @parent_id,
       cloud_agent_id = @cloud_agent_id,
+      source_url = @source_url, stream_source = @stream_source,
+      channel = @channel, due = @due,
       repo = @repo, branch = @branch,
       worktree = @worktree, notes = @notes, pr_number = @pr_number,
       pr_url = @pr_url, tags_json = @tags_json,
@@ -761,34 +943,45 @@ export function updateTaskFieldsInDb(
       updated_at = @updated_at
     WHERE id = @id
   `).run(next);
-  if (fields.tags !== undefined) {
+  if (fieldsForUpdate.tags !== undefined) {
     refreshTagVocab();
+  }
+  if (terminalReason !== null) {
+    return setTaskDoneInDb(rowId, true, terminalReason);
   }
   return true;
 }
 
 export function deleteTaskFromDb(rowId: string): boolean {
   const db = openActiveTasksDb();
-  db.prepare(
-    "UPDATE active_work SET parent_id = NULL, updated_at = ? WHERE parent_id = ?"
-  ).run(nowIso(), rowId);
-  const result = db.prepare("DELETE FROM active_work WHERE id = ?").run(rowId);
-  return result.changes > 0;
+  const remove = db.transaction(() => {
+    const ts = nowIso();
+    db.prepare(
+      "UPDATE active_work SET parent_id = NULL, updated_at = ? WHERE parent_id = ?"
+    ).run(ts, rowId);
+    db.prepare(
+      "UPDATE active_work SET blocked_by_id = NULL, updated_at = ? WHERE blocked_by_id = ?"
+    ).run(ts, rowId);
+    return db.prepare("DELETE FROM active_work WHERE id = ?").run(rowId);
+  });
+  return remove().changes > 0;
 }
 
 export function setTaskDoneInDb(
   rowId: string,
   done: boolean,
-  reason: string | null = "manual"
+  reason: DoneReason | string | null = "manual"
 ): boolean {
   const db = openActiveTasksDb();
   const ts = nowIso();
+  const doneReason = done ? normalizeDoneReason(reason) : null;
   const result = db
     .prepare(
       `UPDATE active_work SET
         done = ?, updated_at = ?,
         done_at = CASE WHEN ? = 1 THEN ? ELSE NULL END,
-        done_reason = CASE WHEN ? = 1 THEN ? ELSE NULL END
+        done_reason = CASE WHEN ? = 1 THEN ? ELSE NULL END,
+        cloud_agent_id = CASE WHEN ? = 1 THEN NULL ELSE cloud_agent_id END
        WHERE id = ?`
     )
     .run(
@@ -797,7 +990,8 @@ export function setTaskDoneInDb(
       done ? 1 : 0,
       ts,
       done ? 1 : 0,
-      reason,
+      doneReason,
+      done ? 1 : 0,
       rowId
     );
   return result.changes > 0;
@@ -806,29 +1000,65 @@ export function setTaskDoneInDb(
 export function insertWorkFromQuickAdd(
   title: string,
   status: string,
-  repo?: string | null
-): string | null {
+  repo?: string | null,
+  extras?: { branch?: string | null; worktree?: string | null }
+): InsertWorkResult {
   const trimmedTitle = title.trim();
   const trimmedStatus = status.trim();
   if (!trimmedTitle || !trimmedStatus) {
-    return null;
+    return { id: null, outcome: "invalid" };
   }
+  const repoVal =
+    typeof repo === "string" && repo.trim() ? repo.trim() : null;
+  const branchVal =
+    typeof extras?.branch === "string" && extras.branch.trim()
+      ? extras.branch.trim()
+      : null;
+  const worktreeVal =
+    typeof extras?.worktree === "string" && extras.worktree.trim()
+      ? extras.worktree.trim()
+      : null;
+
+  const candidate = {
+    title: trimmedTitle,
+    label: trimmedTitle,
+    repo: repoVal,
+    branch: branchVal || undefined,
+    worktree: worktreeVal || undefined,
+  };
+  const hit = findSemanticDuplicate(candidate, loadTodosFromDb());
+  if (hit) {
+    const hitTitle = hit.todo.title || hit.todo.label || "task";
+    if (hit.todo.done) {
+      return {
+        id: hit.todo.id,
+        outcome: "refused_done",
+        hitTitle,
+        reasonCode: hit.reasonCode,
+      };
+    }
+    return {
+      id: hit.todo.id,
+      outcome: "reused",
+      hitTitle,
+      reasonCode: hit.reasonCode,
+    };
+  }
+
   const db = openActiveTasksDb();
   const maxOrder = db
     .prepare("SELECT COALESCE(MAX(sort_order), -1) AS m FROM active_work")
     .get() as { m: number };
   const id = newId();
-  const repoVal =
-    typeof repo === "string" && repo.trim() ? repo.trim() : null;
   const ts = nowIso();
   const statusKey = inferStatusKeyFromLabel(trimmedStatus);
   db.prepare(`
     INSERT INTO active_work (
       id, sort_order, title, status, status_key, priority, pinned,
-      created_at, repo, prs_json, links_json, tags_json, done, updated_at
+      created_at, repo, branch, worktree, prs_json, links_json, tags_json, done, updated_at
     ) VALUES (
       @id, @sort_order, @title, @status, @status_key, 1, 0,
-      @created_at, @repo, '[]', '[]', '[]', 0, @updated_at
+      @created_at, @repo, @branch, @worktree, '[]', '[]', '[]', 0, @updated_at
     )
   `).run({
     id,
@@ -838,12 +1068,41 @@ export function insertWorkFromQuickAdd(
     status_key: statusKey,
     created_at: ts,
     repo: repoVal,
+    branch: branchVal,
+    worktree: worktreeVal,
     updated_at: ts,
   });
-  return id;
+  return { id, outcome: "created" };
 }
 
-export function insertWorkFromOpenPr(pr: OpenGitHubPr): string | null {
+
+export function insertWorkFromOpenPr(pr: OpenGitHubPr): InsertWorkResult {
+  const candidate = {
+    title: pr.title,
+    label: pr.title,
+    repo: pr.repoKey,
+    pr_number: pr.number,
+    pr_url: pr.url,
+  };
+  const hit = findSemanticDuplicate(candidate, loadTodosFromDb());
+  if (hit) {
+    const hitTitle = hit.todo.title || hit.todo.label || "task";
+    if (hit.todo.done) {
+      return {
+        id: hit.todo.id,
+        outcome: "refused_done",
+        hitTitle,
+        reasonCode: hit.reasonCode,
+      };
+    }
+    return {
+      id: hit.todo.id,
+      outcome: "reused",
+      hitTitle,
+      reasonCode: hit.reasonCode,
+    };
+  }
+
   const db = openActiveTasksDb();
   const maxOrder = db
     .prepare("SELECT COALESCE(MAX(sort_order), -1) AS m FROM active_work")
@@ -880,8 +1139,9 @@ export function insertWorkFromOpenPr(pr: OpenGitHubPr): string | null {
     pr_url: pr.url,
     updated_at: ts,
   });
-  return id;
+  return { id, outcome: "created" };
 }
+
 
 /** Nest related rows under one initiative (parent_id); keeps each row's own fields. */
 export function mergeWorkRowsIntoPrimary(
@@ -901,7 +1161,7 @@ export function mergeWorkRowsIntoPrimary(
   }
 
   const nest = db.transaction(() => {
-    const links = loadOpenParentLinks(db);
+    const links = loadAllParentLinks(db);
     const map = parentIdMap(links);
     let order = loadOpenOrderIds(db);
     const ts = nowIso();
@@ -980,6 +1240,15 @@ export function dismissDiscovery(kind: string, refKey: string): void {
   db.prepare(
     "INSERT OR IGNORE INTO discovery_dismiss (kind, ref_key) VALUES (?, ?)"
   ).run(kind, refKey);
+}
+
+/** Undo dismissals. Without this a mis-click hides an item permanently. */
+export function clearDiscoveryDismissals(kind?: string): number {
+  const db = openActiveTasksDb();
+  const result = kind
+    ? db.prepare("DELETE FROM discovery_dismiss WHERE kind = ?").run(kind)
+    : db.prepare("DELETE FROM discovery_dismiss").run();
+  return result.changes;
 }
 
 export function dbUpdatedAt(): string | null {

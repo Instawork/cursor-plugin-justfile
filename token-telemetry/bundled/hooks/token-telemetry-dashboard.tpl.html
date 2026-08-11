@@ -630,18 +630,33 @@
                 }
             }
 
-            function renderCharts() {
-                const list = filteredRows();
-                const cumCost = list.map((r) => Number(r.cumulative_cost_usd || 0));
-                const inp = list.map((r) => Number(r.input_uncached_tokens || 0) + Number(r.cache_read_tokens || 0));
-                const out = list.map((r) => Number(r.output_tokens || 0));
+            function renderCharts(list) {
+                const rows = list || filteredRows();
+                const cumCost = rows.map((r) => Number(r.cumulative_cost_usd || 0));
+                const inp = rows.map((r) => Number(r.input_uncached_tokens || 0) + Number(r.cache_read_tokens || 0));
+                const out = rows.map((r) => Number(r.output_tokens || 0));
                 drawLineChart(document.getElementById("chartCost"), cumCost, (v) => "$" + v.toFixed(3));
                 drawBarChart(document.getElementById("chartTokens"), inp, out);
             }
 
-            renderTable();
-            renderCharts();
-            window.addEventListener("resize", () => renderCharts());
+            function softRefresh() {
+                const list = filteredRows();
+                renderTable();
+                renderCharts(list);
+            }
+
+            softRefresh();
+            let resizeTimer = null;
+            let lastChartWidth = 0;
+            window.addEventListener("resize", () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => {
+                    const w = window.innerWidth;
+                    if (w === lastChartWidth) return;
+                    lastChartWidth = w;
+                    renderCharts();
+                }, 120);
+            });
 
             const conv = st.conversation_id;
             document.getElementById("footer").textContent =
@@ -654,7 +669,7 @@
             let refreshTimer;
             function syncRefresh() {
                 clearInterval(refreshTimer);
-                if (auto.checked) refreshTimer = setInterval(() => location.reload(), 20000);
+                if (auto.checked) refreshTimer = setInterval(softRefresh, 20000);
             }
             auto.onchange = syncRefresh;
             syncRefresh();

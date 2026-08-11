@@ -7,22 +7,37 @@ import { join } from "path";
 const require = createRequire(
   new URL("../package.json", import.meta.url)
 );
-const { reconcileExtraWithScanHold } = require(join(import.meta.dirname, "../out/payload.js"));
+const { activeTasksStatusBarText } = require(join(import.meta.dirname, "../out/payload.js"));
 
-test("reconcileExtraWithScanHold keeps prior count while scan pending", () => {
-  const prev = {
-    missingPrs: [{ number: 1, url: "u", repo: "instawork" }],
-    untrackedCloudAgents: [],
-    staleTrackedPrs: [],
-    scannedAt: "2026-01-01T00:00:00Z",
+function payload(todos, extra) {
+  return {
+    activeTasks: { todos },
+    generatedAt: "2026-01-01T00:00:00Z",
+    discovery: {},
+    loadError: null,
+    notice: null,
+    ...extra,
   };
-  const empty = {
-    missingPrs: [],
-    untrackedCloudAgents: [],
-    staleTrackedPrs: [],
-    scannedAt: undefined,
-  };
-  assert.equal(reconcileExtraWithScanHold(empty, true, prev), 1);
-  assert.equal(reconcileExtraWithScanHold(empty, false, prev), 0);
-  assert.equal(reconcileExtraWithScanHold(prev, true, empty), 1);
+}
+
+test("status bar counts open rows only", () => {
+  const text = activeTasksStatusBarText(
+    payload([{ id: "1", done: false }, { id: "2", done: true }])
+  );
+  assert.equal(text, "$(checklist) Tasks 1");
+});
+
+test("status bar shows a dash with no rows", () => {
+  assert.equal(activeTasksStatusBarText(payload([])), "$(checklist) Tasks —");
+});
+
+test("status bar surfaces load errors", () => {
+  assert.equal(
+    activeTasksStatusBarText(payload([], { loadError: "db gone" })),
+    "$(error) Tasks error"
+  );
+  assert.equal(
+    activeTasksStatusBarText(payload([], { notice: { level: "error" } })),
+    "$(error) Tasks error"
+  );
 });

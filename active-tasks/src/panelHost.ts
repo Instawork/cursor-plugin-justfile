@@ -1,38 +1,40 @@
 import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
 import * as vscode from "vscode";
 import {
   insertWorkFromQuickAdd,
   moveTaskSibling,
   moveTaskToSection,
   nestTaskUnder,
-  removeTaskRow,
-  reorderTasks,
   setTaskPinned,
   setTodoDone,
+  loadActiveTasks,
   setTodoDonePersistent,
   updateTaskFields,
 } from "./activeTasks";
-import { activeTasksDbPath, seedActiveWorkIfEmpty } from "./activeTasksStore";
+import {
+  activeTasksDbPath,
+  mergeWorkRowsIntoPrimary,
+  seedActiveWorkIfEmpty,
+} from "./activeTasksStore";
 import type { TaskDragGroupSync, TaskFieldUpdate } from "./taskModel";
-import { coerceOpenGitHubPr } from "./githubOpenPrs";
+import {
+  doneReasonForStatusKey,
+  normalizeDoneReason,
+} from "./taskModel";
+import { resolveWorktreePath } from "./paths";
+import { planPathFromUrl } from "./planLink";
+import { launchCloudAgentForTask } from "./agentLaunch";
+import { getCloudApiKey } from "./cloudSecrets";
 import {
   invalidateTaskDiscoveryCache,
   loadTaskDiscovery,
-  reconcileAddPr,
-  reconcileAttachPr,
-  reconcileDismissItem,
-  reconcileMergeWorkRows,
 } from "./discovery";
-import { resetReconcileFeedBaseline } from "./reconcileFeed";
 import {
   activeTasksStatusBarText,
   loadActiveTasksPayload,
-  reconcileExtraWithScanHold,
   type ActiveTasksPayload,
 } from "./payload";
-import { enrichDiscoveryWithConsolidation } from "./workConsolidation";
+import { enrichDiscoveryWithConsolidation, reasonLabel } from "./workConsolidation";
 import {
   discoveryWarnings,
   formatPanelError,
@@ -61,7 +63,10 @@ function parseDragGroupSync(raw: unknown): TaskDragGroupSync | undefined {
     sync.status = o.status;
   }
   if (typeof o.status_key === "string") {
-    sync.status_key = o.status_key as TaskDragGroupSync["status_key"];
+    // Terminal keys finish elsewhere; never cast them into an open StatusKey.
+    if (!doneReasonForStatusKey(o.status_key)) {
+      sync.status_key = o.status_key as TaskDragGroupSync["status_key"];
+    }
   }
   return Object.keys(sync).length ? sync : undefined;
 }
@@ -83,21 +88,14 @@ function tasksTooltip(payload: ActiveTasksPayload): vscode.MarkdownString {
   } else {
     md.appendMarkdown("- No active tasks loaded.");
   }
-  const d = payload.discovery;
-  if (d.missingPrs.length || d.staleTrackedPrs.length) {
-    md.appendMarkdown(
-      `\n- Reconcile: **${d.missingPrs.length}** untracked PRs, **${d.staleTrackedPrs.length}** stale`
-    );
-  }
-  if (d.structuralMergeCandidates?.length) {
-    md.appendMarkdown(
-      `\n- Structural merges: **${d.structuralMergeCandidates.length}** duplicate links`
-    );
-  }
-  const agent = d.agentConsolidation;
+  const agent = (
+    payload.discovery as {
+      agentConsolidation?: { overRecommended?: boolean; rootCount?: number };
+    }
+  ).agentConsolidation;
   if (agent?.overRecommended) {
     md.appendMarkdown(
-      `\n- Agent consolidate: **${agent.openCount}** open rows (target 3–8)`
+      `\n- Agent consolidate: **${agent.rootCount}** initiatives (target 3–8)`
     );
   }
   md.appendMarkdown("\n\n---\n\n");
@@ -133,8 +131,6 @@ export class PanelHost {
   private panelNotice: PanelNotice | null = null;
   private lastStatusBarText: string | undefined;
   private lastStatusBarErrorBg: boolean | undefined;
-  private statusBarHoldTimer: NodeJS.Timeout | undefined;
-  private discoveryScanPending = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -155,10 +151,6 @@ export class PanelHost {
   }
 
   dispose(): void {
-    if (this.statusBarHoldTimer) {
-      clearTimeout(this.statusBarHoldTimer);
-      this.statusBarHoldTimer = undefined;
-    }
     this.statusBar.dispose();
     this.popout?.dispose();
     this.popout = undefined;
@@ -246,19 +238,8 @@ export class PanelHost {
     };
   }
 
-  /** Avoid flashing "+N reconcile" while discovery cache is empty mid-scan. */
-  private reconcileExtraForStatusBar(payload: ActiveTasksPayload): number {
-    return reconcileExtraWithScanHold(
-      payload.discovery,
-      this.discoveryScanPending,
-      this.lastPayload?.discovery
-    );
-  }
-
   private applyStatusBar(payload: ActiveTasksPayload): void {
-    const text = activeTasksStatusBarText(payload, {
-      reconcileExtra: this.reconcileExtraForStatusBar(payload),
-    });
+    const text = activeTasksStatusBarText(payload);
     const errorBg = Boolean(
       payload.loadError || payload.notice?.level === "error"
     );
@@ -316,6 +297,53 @@ export class PanelHost {
     }
   }
 
+  private async runPanelActionAsync(
+    title: string,
+    fn: () => Promise<void>
+  ): Promise<void> {
+    try {
+      await fn();
+      this.clearPanelNotice();
+    } catch (err) {
+      this.setPanelError(title, err);
+      this.pushUpdate({ skipDiscovery: true });
+    }
+  }
+
+  /**
+   * Start a cloud subagent for a row and record the agent id on that row, so
+   * the panel's "in flight" state and the agent itself cannot disagree.
+   */
+  private async launchAgentForTask(todoId: string): Promise<void> {
+    const todo = loadActiveTasks().todos.find((t) => t.id === todoId);
+    if (!todo) {
+      throw new Error("Task row not found.");
+    }
+    if (todo.cloud_agent_id?.trim()) {
+      throw new Error(
+        `Task already has an agent in flight (${todo.cloud_agent_id.trim()}).`
+      );
+    }
+    const apiKey = await getCloudApiKey(this.context.secrets);
+    if (!apiKey) {
+      throw new Error(
+        "No Cursor API key stored. Run 'Active Tasks: Set Cloud API Key' first."
+      );
+    }
+    const launched = await launchCloudAgentForTask(todo, apiKey);
+    const ok = updateTaskFields(todoId, {
+      cloud_agent_id: launched.agentId,
+      status_key: "progress",
+    });
+    if (!ok) {
+      throw new Error(
+        `Agent ${launched.agentId} started but the row could not be updated. Set cloud_agent_id by hand.`
+      );
+    }
+    invalidateTaskDiscoveryCache();
+    this.pushUpdate({ forceDiscovery: true });
+  }
+
   pushUpdate(options?: {
     forceDiscovery?: boolean;
     skipDiscovery?: boolean;
@@ -346,17 +374,6 @@ export class PanelHost {
       options?.skipDiscovery && !options?.forceDiscovery
     );
     try {
-      if (willRunDiscovery) {
-        this.discoveryScanPending = true;
-        if (this.statusBarHoldTimer) {
-          clearTimeout(this.statusBarHoldTimer);
-        }
-        this.statusBarHoldTimer = setTimeout(() => {
-          this.discoveryScanPending = false;
-          this.statusBarHoldTimer = undefined;
-        }, 45_000);
-      }
-
       const payload = this.finalizePayload(
         loadActiveTasksPayload(workspace),
         workspace
@@ -379,11 +396,6 @@ export class PanelHost {
           if (gen !== this.refreshGen) {
             return;
           }
-          if (this.statusBarHoldTimer) {
-            clearTimeout(this.statusBarHoldTimer);
-            this.statusBarHoldTimer = undefined;
-          }
-          this.discoveryScanPending = false;
           const next = this.finalizePayload(
             {
               ...loadActiveTasksPayload(workspace),
@@ -397,11 +409,6 @@ export class PanelHost {
           if (gen !== this.refreshGen) {
             return;
           }
-          if (this.statusBarHoldTimer) {
-            clearTimeout(this.statusBarHoldTimer);
-            this.statusBarHoldTimer = undefined;
-          }
-          this.discoveryScanPending = false;
           this.setPanelError("Discovery scan failed", err);
           const next = this.finalizePayload(
             loadActiveTasksPayload(workspace),
@@ -440,10 +447,7 @@ export class PanelHost {
     if (!raw || raw.includes("\0")) {
       return;
     }
-    const expanded = raw.startsWith("~")
-      ? path.join(os.homedir(), raw.slice(1).replace(/^\//, ""))
-      : path.resolve(raw);
-    const normalized = path.normalize(expanded);
+    const normalized = resolveWorktreePath(raw);
     if (!fs.existsSync(normalized)) {
       void vscode.window.showWarningMessage(`Worktree not found: ${normalized}`);
       return;
@@ -453,6 +457,23 @@ export class PanelHost {
       vscode.Uri.file(normalized),
       { forceNewWindow: false }
     );
+  }
+
+  private openPlanPath(raw: string): void {
+    const plan = planPathFromUrl(raw);
+    if (!plan) {
+      void vscode.window.showWarningMessage(
+        `Not a plan file under ~/.cursor/plans: ${raw}`
+      );
+      return;
+    }
+    if (!fs.existsSync(plan)) {
+      void vscode.window.showWarningMessage(`Plan not found: ${plan}`);
+      return;
+    }
+    void vscode.window.showTextDocument(vscode.Uri.file(plan), {
+      preview: false,
+    });
   }
 
   private wireWebview(webview: vscode.Webview): void {
@@ -471,6 +492,17 @@ export class PanelHost {
           this.openWorktreePath(msg.path.trim());
           return;
         }
+        if (type === "openPlan" && typeof msg.path === "string") {
+          this.openPlanPath(msg.path.trim());
+          return;
+        }
+        if (type === "launchAgent" && typeof msg.id === "string") {
+          const id = msg.id;
+          void this.runPanelActionAsync("Launch agent failed", () =>
+            this.launchAgentForTask(id)
+          );
+          return;
+        }
         if (type === "openDatabase") {
           const db = activeTasksDbPath();
           void vscode.window.showTextDocument(vscode.Uri.file(db), {
@@ -481,35 +513,6 @@ export class PanelHost {
         if (type === "refresh") {
           invalidateTaskDiscoveryCache();
           this.pushUpdate({ forceDiscovery: true });
-          return;
-        }
-        if (type === "reconcileResetBaseline") {
-          resetReconcileFeedBaseline();
-          invalidateTaskDiscoveryCache();
-          this.pushUpdate({ forceDiscovery: true });
-          return;
-        }
-        if (type === "reconcileSetBackfill" && typeof msg.enabled === "boolean") {
-          void vscode.workspace
-            .getConfiguration("activeTasks")
-            .update(
-              "reconcile.backfill",
-              msg.enabled,
-              vscode.ConfigurationTarget.Global
-            );
-          return;
-        }
-        if (
-          type === "reconcileSetIncludeReview" &&
-          typeof msg.enabled === "boolean"
-        ) {
-          void vscode.workspace
-            .getConfiguration("activeTasks")
-            .update(
-              "reconcile.includeReviewRequested",
-              msg.enabled,
-              vscode.ConfigurationTarget.Global
-            );
           return;
         }
         if (type === "resyncDatabase") {
@@ -540,20 +543,22 @@ export class PanelHost {
           typeof msg.mode === "string"
         ) {
           const mode = msg.mode;
-          if (mode === "session" || mode === "remove" || mode === "archive") {
-            setTodoDonePersistent(msg.id, mode);
+          if (
+            mode === "session" ||
+            mode === "remove" ||
+            mode === "done" ||
+            mode === "archive"
+          ) {
+            const reason = normalizeDoneReason(
+              typeof msg.reason === "string" ? msg.reason : "manual"
+            );
+            setTodoDonePersistent(
+              msg.id,
+              mode as "session" | "remove" | "done" | "archive",
+              reason
+            );
             invalidateTaskDiscoveryCache();
             this.pushUpdate({ forceDiscovery: true });
-          }
-          return;
-        }
-        if (type === "reorderTodos" && Array.isArray(msg.order)) {
-          const ids = msg.order.filter(
-            (x): x is string => typeof x === "string"
-          );
-          if (ids.length) {
-            reorderTasks(ids);
-            this.pushUpdate({ skipDiscovery: true });
           }
           return;
         }
@@ -649,57 +654,6 @@ export class PanelHost {
           });
           return;
         }
-        if (type === "reconcileAddPr" && msg.pr && typeof msg.pr === "object") {
-          const pr = coerceOpenGitHubPr(msg.pr);
-          if (pr) {
-            reconcileAddPr(pr);
-            invalidateTaskDiscoveryCache();
-            this.pushUpdate({ forceDiscovery: true });
-          }
-          return;
-        }
-        if (
-          type === "reconcileAttachPr" &&
-          typeof msg.workId === "string" &&
-          msg.pr &&
-          typeof msg.pr === "object"
-        ) {
-          const pr = coerceOpenGitHubPr(msg.pr);
-          if (pr) {
-            reconcileAttachPr(msg.workId.trim(), pr);
-            invalidateTaskDiscoveryCache();
-            this.pushUpdate({ forceDiscovery: true });
-          }
-          return;
-        }
-        if (
-          type === "reconcileDismiss" &&
-          typeof msg.kind === "string" &&
-          typeof msg.refKey === "string"
-        ) {
-          const kind = msg.kind;
-          if (kind !== "pr" && kind !== "cloud") {
-            return;
-          }
-          const refKey = msg.refKey.trim();
-          if (!refKey) {
-            return;
-          }
-          reconcileDismissItem(kind, refKey);
-          invalidateTaskDiscoveryCache();
-          this.pushUpdate({ forceDiscovery: true });
-          return;
-        }
-        if (type === "reconcileRemoveRow" && typeof msg.id === "string") {
-          removeTaskRow(msg.id);
-          invalidateTaskDiscoveryCache();
-          this.pushUpdate({ forceDiscovery: true });
-          return;
-        }
-        if (type === "copyAgentConsolidationBrief") {
-          void this.copyAgentConsolidationBrief();
-          return;
-        }
         if (
           type === "mergeWorkRows" &&
           typeof msg.primaryId === "string" &&
@@ -714,7 +668,7 @@ export class PanelHost {
             return;
           }
           this.runPanelAction("Nest failed", () => {
-            const ok = reconcileMergeWorkRows(primaryId, mergeIds);
+            const ok = mergeWorkRowsIntoPrimary(primaryId, mergeIds);
             if (!ok) {
               throw new Error(
                 "Could not nest tasks (missing row, cycle, or invalid selection)."
@@ -736,9 +690,26 @@ export class PanelHost {
           }
           this.runPanelAction("Add task failed", () => {
             const ws = this.workspaceContext();
-            const id = insertWorkFromQuickAdd(title, status, ws.repoKey ?? null);
-            if (!id) {
+            const result = insertWorkFromQuickAdd(title, status, ws.repoKey ?? null, {
+              branch: ws.branch,
+              worktree: ws.folder,
+            });
+            if (result.outcome === "invalid" || !result.id) {
               throw new Error("Could not insert task (empty title or status).");
+            }
+            if (result.outcome === "refused_done") {
+              void vscode.window.showWarningMessage(
+                `Already done — "${result.hitTitle}". Reopen from the Done filter if needed.` +
+                  (result.reasonCode ? ` (${reasonLabel(result.reasonCode)})` : "")
+              );
+              this.pushUpdate({ skipDiscovery: true });
+              return;
+            }
+            if (result.outcome === "reused") {
+              void vscode.window.showInformationMessage(
+                `Already open — reused "${result.hitTitle}".` +
+                  (result.reasonCode ? ` (${reasonLabel(result.reasonCode)})` : "")
+              );
             }
             invalidateTaskDiscoveryCache();
             this.pushUpdate({ forceDiscovery: true });

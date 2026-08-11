@@ -62,53 +62,14 @@ export function loadActiveTasksPayload(
   }
 }
 
-export function reconcileItemCount(discovery: TaskDiscoverySnapshot): number {
-  return (
-    discovery.missingPrs.length +
-    discovery.untrackedCloudAgents.length +
-    discovery.staleTrackedPrs.length +
-    (discovery.structuralMergeCandidates?.length ?? 0)
-  );
-}
-
-/** Keep prior +N on the status bar while a discovery scan is in flight and cache is empty. */
-export function reconcileExtraWithScanHold(
-  discovery: TaskDiscoverySnapshot,
-  scanPending: boolean,
-  previousDiscovery: TaskDiscoverySnapshot | undefined
-): number {
-  const cur = reconcileItemCount(discovery);
-  if (cur > 0 || discovery.scannedAt) {
-    return cur;
-  }
-  if (scanPending && previousDiscovery) {
-    const prev = reconcileItemCount(previousDiscovery);
-    if (prev > 0) {
-      return prev;
-    }
-  }
-  return 0;
-}
-
-export function activeTasksStatusBarText(
-  payload: ActiveTasksPayload,
-  options?: { reconcileExtra?: number }
-): string {
+export function activeTasksStatusBarText(payload: ActiveTasksPayload): string {
   if (payload.loadError || payload.notice?.level === "error") {
     return "$(error) Tasks error";
   }
   const todos = payload.activeTasks.todos || [];
-  const reconcileExtra =
-    options?.reconcileExtra ?? reconcileItemCount(payload.discovery);
   if (!todos.length) {
-    if (reconcileExtra) {
-      return "$(checklist) Tasks +" + reconcileExtra;
-    }
     return "$(checklist) Tasks —";
   }
   const open = todos.filter((t) => !t.done).length;
-  if (reconcileExtra > 0) {
-    return "$(checklist) Tasks " + open + " +" + reconcileExtra;
-  }
-  return "$(checklist) Tasks " + open + " open";
+  return "$(checklist) Tasks " + open;
 }
